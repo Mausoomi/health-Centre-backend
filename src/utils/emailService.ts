@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { Transporter } from 'nodemailer';
 
 interface SendOtpEmailOptions {
   to: string;
@@ -7,9 +7,9 @@ interface SendOtpEmailOptions {
 }
 
 // Create reusable transporter
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
-const getTransporter = async (): Promise<nodemailer.Transporter> => {
+const getTransporter = async (): Promise<Transporter> => {
   if (transporter) return transporter;
 
   const host = process.env.SMTP_HOST || process.env.EMAIL_HOST;

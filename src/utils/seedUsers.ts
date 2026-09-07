@@ -133,7 +133,7 @@ export const seedInitialUsersIfEmpty = async () => {
       ];
 
       for (const u of initialSeed) {
-        await User.create(u);
+        await User.create(u as any);
       }
 
       console.log('Initial users seeded successfully into MongoDB.');
