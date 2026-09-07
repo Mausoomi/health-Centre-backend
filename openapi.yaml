@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: HealthCenterApp API
+  description: API endpoints for Citizens, CDHAs, PDHOs, and HC Admins.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local Development Server
+paths:
+  /auth/send-otp:
+    post:
+      summary: Request email OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+              required:
+                - email
+      responses:
+        '200':
+          description: OTP sent successfully
+  /auth/verify-otp:
+    post:
+      summary: Verify OTP and log in / register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                otp:
+                  type: string
+                name:
+                  type: string
+              required:
+                - email
+                - otp
+      responses:
+        '200':
+          description: Verification successful, returns JWT
+  /auth/refresh:
+    post:
+      summary: Refresh JWT token
+      responses:
+        '200':
+          description: Access token refreshed
+  /profile:
+    get:
+      summary: Get active user profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+  /citizen/facilities:
+    get:
+      summary: Search medical facilities
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
