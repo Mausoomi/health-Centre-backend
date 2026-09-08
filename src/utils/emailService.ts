@@ -15,31 +15,37 @@ const getTransporter = (): Transporter | null => {
   const user = (process.env.SMTP_USER || '').trim();
   const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
   const host = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
-  const port = Number(process.env.SMTP_PORT) || 465;
-  const secure = process.env.SMTP_SECURE !== 'false' && port === 465;
 
   if (!user || !pass) {
     console.warn('[NODEMAILER CONFIG] Missing SMTP_USER or SMTP_PASS in environment variables.');
     return null;
   }
 
-  // Optimized cloud SMTP Transport with generous timeouts and robust TLS
+  // If host is Gmail, use Nodemailer built-in Gmail service (handles ports & TLS automatically)
+  if (host.includes('gmail') || user.endsWith('@gmail.com')) {
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user,
+        pass,
+      },
+    });
+    return transporter;
+  }
+
+  // Standard SMTP transport
   transporter = nodemailer.createTransport({
-    host: host.includes('gmail') || user.endsWith('@gmail.com') ? 'smtp.gmail.com' : host,
-    port,
-    secure,
+    host,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === 'true',
     auth: {
       user,
       pass,
     },
     tls: {
       rejectUnauthorized: false,
-      minVersion: 'TLSv1.2',
     },
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
-  } as any);
+  });
 
   return transporter;
 };
