@@ -36,6 +36,38 @@ export interface AuthResult {
 
 export const requestOTP = async (email: string): Promise<string> => {
   const normalizedEmail = email.trim().toLowerCase();
+
+  // Check if existing user exists
+  const existingUser = await User.findOne({ email: normalizedEmail });
+  if (!existingUser) {
+    const error: any = new Error('This email is not registered.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    throw error;
+  }
+
+  // Strictly disallow Admin accounts from logging in through regular User Portal
+  const isAdminAccount =
+    existingUser.role &&
+    existingUser.role !== 'EndUser' &&
+    (existingUser.role.toLowerCase().includes('admin') || existingUser.role === 'SuperAdmin');
+  if (isAdminAccount) {
+    const error: any = new Error('This email is not registered.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    throw error;
+  }
+
+  // Check if user is verified
+  if (existingUser.isVerified === false) {
+    const error: any = new Error('Please verify your email address first. A verification link has been sent to your email.');
+    error.code = 'EMAIL_NOT_VERIFIED';
+    error.email = existingUser.email;
+    throw error;
+  }
+
+  if (existingUser.status === 'Suspended' || existingUser.status === 'Deactivated') {
+    throw new Error(`Your account is ${existingUser.status.toLowerCase()}. Please contact support.`);
+  }
+
   // Generate a 6-digit OTP code
   const generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -46,16 +78,11 @@ export const requestOTP = async (email: string): Promise<string> => {
     { upsert: true, new: true }
   );
 
-  // Check if existing user has a name
-  const existingUser = await User.findOne({ email: normalizedEmail });
-
-  // Dispatch actual email in background
-  sendOtpEmail({
+  // Dispatch actual email
+  await sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
-    name: existingUser?.name,
-  }).catch((err) => {
-    console.error('[USER OTP EMAIL ERROR]', err);
+    name: existingUser.name,
   });
 
   return generatedOTP;
@@ -71,43 +98,36 @@ export const verifyUserOTP = async (email: string, otp: string, name?: string): 
   // Delete the verified OTP
   await OTP.deleteOne({ _id: record._id });
 
-  // Find or create User
+  // Find User
   let user = await User.findOne({ email: normalizedEmail });
-  if (user) {
-    const isAdminAccount =
-      user.role &&
-      user.role !== 'EndUser' &&
-      (user.role.toLowerCase().includes('admin') || user.role === 'SuperAdmin');
+  if (!user) {
+    const error: any = new Error('This email is not registered.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    throw error;
+  }
 
-    if (isAdminAccount) {
-      throw new Error('This portal is for registered members only.');
-    }
+  const isAdminAccount =
+    user.role &&
+    user.role !== 'EndUser' &&
+    (user.role.toLowerCase().includes('admin') || user.role === 'SuperAdmin');
 
-    try {
-      user.isVerified = true;
-      user.status = 'Active';
-      user.lastActive = new Date();
-      await user.save();
-    } catch (e) {
-      // ignore
-    }
-  } else {
-    const randomMemberNum = Math.floor(10000 + Math.random() * 90000);
-    user = await User.create({
-      email: normalizedEmail,
-      memberId: `HC-${randomMemberNum}`,
-      name: name || normalizedEmail.split('@')[0],
-      role: 'EndUser',
-      status: 'Active',
-      isVerified: true,
-      plan: 'Free Plan',
-      avatar: '',
-      lastActive: new Date(),
-    });
+  if (isAdminAccount) {
+    const error: any = new Error('This email is not registered.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    throw error;
   }
 
   if (user.status === 'Suspended' || user.status === 'Deactivated') {
     throw new Error(`Your account has been ${user.status.toLowerCase()}. Please contact support.`);
+  }
+
+  try {
+    user.isVerified = true;
+    user.status = 'Active';
+    user.lastActive = new Date();
+    await user.save();
+  } catch (e) {
+    // ignore
   }
 
   const payload = {
@@ -197,13 +217,11 @@ export const registerUser = async (data: {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  // Send verification email via Nodemailer in background
-  sendVerificationEmail({
+  // Send verification email via Nodemailer
+  await sendVerificationEmail({
     to: normalizedEmail,
     name: user.name,
     verificationUrl,
-  }).catch((err) => {
-    console.error('[USER VERIFICATION EMAIL ERROR]', err);
   });
 
   return {
@@ -219,7 +237,9 @@ export const loginWithPassword = async (email: string, password: string): Promis
 
   const user = await User.findOne({ email: normalizedEmail }).select('+password');
   if (!user) {
-    throw new Error('Incorrect login password.');
+    const error: any = new Error('This email is not registered.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    throw error;
   }
 
   // Strictly disallow Admin accounts from logging in through the regular User Portal
@@ -229,7 +249,9 @@ export const loginWithPassword = async (email: string, password: string): Promis
     (user.role.toLowerCase().includes('admin') || user.role === 'SuperAdmin');
 
   if (isAdminAccount) {
-    throw new Error('Incorrect login password.');
+    const error: any = new Error('This email is not registered.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    throw error;
   }
 
   if (!user.password) {
@@ -378,12 +400,10 @@ export const resendVerificationEmail = async (
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  sendVerificationEmail({
+  await sendVerificationEmail({
     to: normalizedEmail,
     name: user.name,
     verificationUrl,
-  }).catch((err) => {
-    console.error('[USER RESEND VERIFICATION EMAIL ERROR]', err);
   });
 
   return {

@@ -84,6 +84,11 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       return;
     }
 
+    if (error?.code === 'EMAIL_NOT_REGISTERED' || msg.toLowerCase().includes('not registered')) {
+      res.status(404).json({ success: false, code: 'EMAIL_NOT_REGISTERED', message: 'This email is not registered.' });
+      return;
+    }
+
     res.status(400).json({ success: false, message: 'Incorrect login password.' });
   }
 };
@@ -124,7 +129,7 @@ export const sendOTP = async (req: Request, res: Response, next: NextFunction): 
   try {
     const { email } = req.body;
     if (!email) {
-      res.status(400).json({ message: 'Email is required' });
+      res.status(400).json({ success: false, message: 'Email is required.' });
       return;
     }
 
@@ -133,12 +138,36 @@ export const sendOTP = async (req: Request, res: Response, next: NextFunction): 
     console.log(`[DEV OTP] Generated OTP ${generatedOTP} for email ${email}`);
 
     res.status(200).json({
+      success: true,
       message: 'OTP sent successfully',
       email,
       otp: process.env.NODE_ENV !== 'production' ? generatedOTP : undefined,
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    const msg = error?.message || '';
+    if (error?.code === 'EMAIL_NOT_VERIFIED' || msg.toLowerCase().includes('verify your email')) {
+      res.status(403).json({
+        success: false,
+        code: 'EMAIL_NOT_VERIFIED',
+        email: error?.email || req.body.email,
+        message: 'Please verify your email address first. A verification link has been sent to your email.',
+      });
+      return;
+    }
+
+    if (error?.code === 'EMAIL_NOT_REGISTERED' || msg.toLowerCase().includes('not registered')) {
+      res.status(404).json({
+        success: false,
+        code: 'EMAIL_NOT_REGISTERED',
+        message: 'This email is not registered.',
+      });
+      return;
+    }
+
+    res.status(400).json({
+      success: false,
+      message: msg || 'Failed to send login code. Please try again.',
+    });
   }
 };
 
@@ -146,7 +175,7 @@ export const verifyOTP = async (req: Request, res: Response, next: NextFunction)
   try {
     const { email, otp, name } = req.body;
     if (!email || !otp) {
-      res.status(400).json({ message: 'Email and OTP are required' });
+      res.status(400).json({ success: false, message: 'Email and OTP are required.' });
       return;
     }
 
@@ -160,12 +189,23 @@ export const verifyOTP = async (req: Request, res: Response, next: NextFunction)
     });
 
     res.status(200).json({
+      success: true,
       message: 'Authentication successful',
       accessToken,
       user,
     });
-  } catch (error) {
-    res.status(400).json({ message: (error as Error).message });
+  } catch (error: any) {
+    const msg = error?.message || '';
+    if (error?.code === 'EMAIL_NOT_REGISTERED' || msg.toLowerCase().includes('not registered')) {
+      res.status(404).json({
+        success: false,
+        code: 'EMAIL_NOT_REGISTERED',
+        message: 'This email is not registered.',
+      });
+      return;
+    }
+
+    res.status(400).json({ success: false, message: msg || 'Invalid or expired OTP.' });
   }
 };
 

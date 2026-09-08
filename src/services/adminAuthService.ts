@@ -75,18 +75,20 @@ export const seedDefaultAdmins = async () => {
 export const adminLoginWithPassword = async (
   email: string,
   plainPassword: string
-): Promise<{ email: string; name: string; role: string; firstUse: boolean; message: string; otp?: string }> => {
+): Promise<{ email: string; name: string; role: string; firstUse: boolean; message: string }> => {
   const normalizedEmail = email.trim().toLowerCase();
+
+  // Ensure default accounts are seeded
+  await seedDefaultAdmins();
 
   let user = await User.findOne({ email: normalizedEmail });
 
   // Special check for user's explicit requested admin credentials if not already created
-  if (!user && (normalizedEmail === 'admin.healthcentre@mailinator.com' || normalizedEmail === 'healthcentreofficial@mailinator.com')) {
-    const matchingDef = DEFAULT_ADMINS.find((d) => d.email.toLowerCase() === normalizedEmail);
-    const hashedPassword = await bcrypt.hash(matchingDef?.password || 'Admin@123', 10);
+  if (!user && normalizedEmail === 'admin.healthcentre@mailinator.com') {
+    const hashedPassword = await bcrypt.hash('Admin@123', 10);
     user = await User.create({
       email: normalizedEmail,
-      name: matchingDef?.name || 'Admin HealthCentre',
+      name: 'Admin HealthCentre',
       password: hashedPassword,
       role: 'Global Admin',
       status: 'Active',
@@ -128,11 +130,10 @@ export const adminLoginWithPassword = async (
       isMatch = await bcrypt.compare(plainPassword, user.password);
     } else {
       isMatch = user.password === plainPassword;
-      // Upgrade plain password to hashed asynchronously
+      // Upgrade plain password to hashed
       if (isMatch) {
-        bcrypt.hash(plainPassword, 10).then((hashed) => {
-          User.updateOne({ _id: user!._id }, { password: hashed }).catch(() => {});
-        });
+        user.password = await bcrypt.hash(plainPassword, 10);
+        await user.save();
       }
     }
   }
@@ -144,9 +145,8 @@ export const adminLoginWithPassword = async (
     );
     if (matchingDef) {
       isMatch = true;
-      bcrypt.hash(plainPassword, 10).then((hashed) => {
-        User.updateOne({ _id: user!._id }, { password: hashed }).catch(() => {});
-      });
+      user.password = await bcrypt.hash(plainPassword, 10);
+      await user.save();
     }
   }
 
@@ -164,14 +164,12 @@ export const adminLoginWithPassword = async (
     { upsert: true, new: true }
   );
 
-  // Send real MFA email in background so user doesn't wait for SMTP roundtrips
+  // Send real MFA email to the admin email address
   console.log(`[ADMIN MFA OTP] Code for ${normalizedEmail}: ${generatedOTP}`);
-  sendOtpEmail({
+  await sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: user.name || 'Administrator',
-  }).catch((err) => {
-    console.error('[ADMIN MFA EMAIL ERROR]', err);
   });
 
   return {
@@ -180,7 +178,6 @@ export const adminLoginWithPassword = async (
     role: user.role,
     firstUse: user.status === 'Awaiting First Login',
     message: `A 6-digit MFA verification code has been dispatched to ${user.email}.`,
-    otp: generatedOTP,
   };
 };
 
@@ -261,12 +258,10 @@ export const resendAdminMfa = async (email: string): Promise<string> => {
   );
 
   console.log(`[RESEND ADMIN MFA] Code for ${normalizedEmail}: ${generatedOTP}`);
-  sendOtpEmail({
+  await sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: user.name || 'Administrator',
-  }).catch((err) => {
-    console.error('[RESEND ADMIN MFA ERROR]', err);
   });
 
   return generatedOTP;
