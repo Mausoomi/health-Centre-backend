@@ -41,3 +41,26 @@ export const requireRoles = (roles: string[]) => {
     next();
   };
 };
+
+export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  if (!req.user) {
+    res.status(401).json({ message: 'User not authenticated' });
+    return;
+  }
+
+  const roleLower = String(req.user.role || '').toLowerCase();
+  const isAdmin =
+    roleLower.includes('admin') ||
+    req.user.role === 'SuperAdmin' ||
+    req.user.role === 'Global Admin' ||
+    req.user.role === 'Operations Admin' ||
+    req.user.role === 'Content Admin' ||
+    req.user.role === 'Moderation Admin';
+
+  if (!isAdmin) {
+    res.status(403).json({ message: 'Forbidden: Admin privileges required' });
+    return;
+  }
+
+  next();
+};

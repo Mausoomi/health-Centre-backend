@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Review } from '../../models/Review';
+import { Report } from '../../models/Report';
 
 export const submitReview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -169,8 +170,10 @@ export const reportReview = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
+    const reportId = `REP-REV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
     const newReport = {
-      id: `report-${Date.now()}`,
+      id: reportId,
       reason: reason.trim(),
       comment: comment?.trim() || '',
       reporterEmail: reporterEmail?.trim() || '',
@@ -185,10 +188,28 @@ export const reportReview = async (req: Request, res: Response, next: NextFuncti
 
     await review.save();
 
+    // Create entry in central Report collection
+    await Report.create({
+      reportId,
+      itemType: 'review',
+      itemId: String(review._id),
+      itemTitle: review.title ? `Review: "${review.title}"` : `Review by ${review.reviewerName || 'Member'}`,
+      itemContent: review.text,
+      itemImage: review.image || '',
+      itemAuthor: review.reviewerName || 'Member',
+      itemLocation: review.country || 'Nigeria',
+      reporterName: reporterEmail ? reporterEmail.split('@')[0] : 'Community Member',
+      reporterEmail: reporterEmail?.trim() || '',
+      reasons: [reason.trim()],
+      note: comment?.trim() || '',
+      status: 'New',
+      adminNotes: [],
+    });
+
     res.status(201).json({
       success: true,
       message: 'Report submitted for administrative review',
-      reportId: newReport.id,
+      reportId,
     });
   } catch (error) {
     next(error);

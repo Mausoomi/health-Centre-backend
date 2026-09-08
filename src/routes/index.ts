@@ -7,6 +7,8 @@ import {
   userContactRoutes,
   userAdvertRoutes,
   userVoucherRoutes,
+  userPaymentRoutes,
+  userNewsRoutes,
 } from './user';
 import { requireAuth } from '../middlewares/auth';
 
@@ -40,8 +42,14 @@ router.use('/contact', userContactRoutes);
 // Public & User Adverts endpoints (/api/v1/adverts/*)
 router.use('/adverts', userAdvertRoutes);
 
+// Public & User News endpoints (/api/v1/news/*)
+router.use('/news', userNewsRoutes);
+
 // User Vouchers endpoints (/api/v1/vouchers/*)
 router.use('/vouchers', userVoucherRoutes);
+
+// User Payments & Stripe Checkout endpoints (/api/v1/payments/*)
+router.use('/payments', userPaymentRoutes);
 
 // Namespaced User endpoints (/api/v1/user/*)
 router.use('/user', userRoutes);

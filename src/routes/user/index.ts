@@ -4,6 +4,8 @@ import { userReviewRoutes } from './userReviewRoutes';
 import { userContactRoutes } from './userContactRoutes';
 import { userAdvertRoutes } from './userAdvertRoutes';
 import { userVoucherRoutes } from './userVoucherRoutes';
+import { userPaymentRoutes } from './userPaymentRoutes';
+import { userNewsRoutes } from './userNewsRoutes';
 
 const router = Router();
 
@@ -29,5 +31,20 @@ router.use('/adverts', userAdvertRoutes);
 // User voucher purchases, dashboard, and redemption
 router.use('/vouchers', userVoucherRoutes);
 
-export const userRoutes = router;
-export { userAuthRoutes, userReviewRoutes, userContactRoutes, userAdvertRoutes, userVoucherRoutes };
+// User payment checkout & verification
+router.use('/payments', userPaymentRoutes);
+
+// Public & User news
+router.use('/news', userNewsRoutes);
+
+export {
+  router as userRoutes,
+  userAuthRoutes,
+  userReviewRoutes,
+  userContactRoutes,
+  userAdvertRoutes,
+  userVoucherRoutes,
+  userPaymentRoutes,
+  userNewsRoutes,
+};
+

@@ -6,63 +6,60 @@ interface SendOtpEmailOptions {
   name?: string;
 }
 
-// Create reusable transporter
+// Create reusable Nodemailer transporter
 let transporter: Transporter | null = null;
 
-const getTransporter = async (): Promise<Transporter> => {
+const getTransporter = (): Transporter => {
   if (transporter) return transporter;
 
-  const host = process.env.SMTP_HOST || process.env.EMAIL_HOST;
-  const port = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587;
-  const user = process.env.SMTP_USER || process.env.EMAIL_USER;
-  const pass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+  const user = process.env.SMTP_USER || '';
+  const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.SMTP_PORT) || 465;
+  const secure = process.env.SMTP_SECURE !== 'false';
 
-  if (user && pass) {
-    // If Gmail host or user ends with gmail.com, use standard Gmail service
-    if (host?.includes('gmail') || user.endsWith('@gmail.com')) {
-      transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user,
-          pass,
-        },
-      });
-      return transporter;
-    }
-
-    // Custom SMTP
-    if (host) {
-      transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: {
-          user,
-          pass,
-        },
-      });
-      return transporter;
-    }
+  // If host is Gmail, use optimized Gmail service configuration
+  if (host.includes('gmail') || user.endsWith('@gmail.com')) {
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user,
+        pass,
+      },
+    });
+    return transporter;
   }
 
-  // Fallback for dev if no credentials provided
+  // Standard SMTP transport
   transporter = nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    secure: false,
+    host,
+    port,
+    secure,
     auth: {
-      user: 'ethereal.user@ethereal.email',
-      pass: 'ethereal.pass',
+      user,
+      pass,
     },
   });
 
   return transporter;
 };
 
-export const sendOtpEmail = async ({ to, otp, name }: SendOtpEmailOptions): Promise<{ sent: boolean; messageId?: string; previewUrl?: string }> => {
+/**
+ * Send OTP verification email using Nodemailer
+ */
+export const sendOtpEmail = async ({
+  to,
+  otp,
+  name,
+}: SendOtpEmailOptions): Promise<{
+  sent: boolean;
+  messageId?: string;
+  previewUrl?: string;
+  deliveredTo?: string;
+}> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <noreply@healthcentreapp.com>';
+  const fromAddress = process.env.EMAIL_FROM || `"HealthCentreApp" <${process.env.SMTP_USER || 'no-reply@healthcentreapp.com'}>`;
+  const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -89,14 +86,18 @@ export const sendOtpEmail = async ({ to, otp, name }: SendOtpEmailOptions): Prom
           <tr>
             <td style="padding: 40px;">
               <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #173f42;">Your Login Verification Code</h2>
-              <p style="margin: 0 0 24px 0; font-size: 15px; line-height: 1.6; color: #4a6568;">
-                Hello <strong>${recipientName}</strong>,<br>
-                Use the one-time verification code below to sign in to your HealthCentreApp account.
+              <p style="margin: 0 0 24px 0; font-size: 15px; line-height: 1.6; color: #466567;">
+                Hello <strong>${recipientName}</strong>,
+              </p>
+              <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #466567;">
+                Use the following 6-digit verification code to complete your secure sign-in to HealthCentreApp:
               </p>
 
               <!-- OTP Box -->
-              <div style="background-color: #f0f8f8; border: 2px dashed #0f8f8f; border-radius: 12px; padding: 24px; text-align: center; margin: 28px 0;">
-                <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #0f8f8f; display: inline-block;">${otp}</span>
+              <div style="background-color: #f0f7f6; border: 2px dashed #0f8f8f; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 28px;">
+                <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #0f8f8f; display: inline-block;">
+                  ${otp}
+                </span>
                 <p style="margin: 10px 0 0 0; font-size: 12px; color: #5f7d80;">Valid for <strong>5 minutes</strong></p>
               </div>
 
@@ -118,71 +119,28 @@ export const sendOtpEmail = async ({ to, otp, name }: SendOtpEmailOptions): Prom
       </td>
     </tr>
   </table>
-</body>
+ </body>
 </html>
   `;
 
-  console.log('---------------------------------------------------------');
-  console.log(`[EMAIL DISPATCH] Target: ${to} | Code: ${otp}`);
-  console.log('---------------------------------------------------------');
-
-  const resendApiKey = process.env.RESEND_API_KEY;
-
-  // 1. Primary: Use Resend API if API key is provided
-  if (resendApiKey) {
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: [to],
-          subject: `Your HealthCentreApp Login Code: ${otp}`,
-          html: htmlContent,
-        }),
-      });
-
-      const data: any = await response.json().catch(() => ({}));
-
-      if (response.ok) {
-        console.log(`[RESEND SUCCESS] Live OTP email dispatched to ${to}! Message ID: ${data?.id}`);
-        return { sent: true, messageId: data?.id };
-      } else {
-        console.error('[RESEND API ERROR]:', data);
-      }
-    } catch (err) {
-      console.error('[RESEND NETWORK ERROR]:', err);
-    }
-  }
-
-  // 2. Secondary: Fallback to SMTP if configured
-  const hasSmtpConfig = Boolean((process.env.SMTP_HOST || process.env.EMAIL_HOST) && (process.env.SMTP_USER || process.env.EMAIL_USER));
-
-  if (!hasSmtpConfig) {
-    return { sent: true };
-  }
+  console.log('=========================================================');
+  console.log(`[NODEMAILER DISPATCH] Destination: ${normalizedTo} | OTP Code: ${otp}`);
+  console.log('=========================================================');
 
   try {
-    const activeTransporter = await getTransporter();
+    const activeTransporter = getTransporter();
     const info = await activeTransporter.sendMail({
       from: fromAddress,
-      to,
+      to: normalizedTo,
       subject: `Your HealthCentreApp Login Code: ${otp}`,
       text: `Your HealthCentreApp login verification code is: ${otp}. It expires in 5 minutes.`,
       html: htmlContent,
     });
 
-    const previewUrl = nodemailer.getTestMessageUrl(info) || undefined;
-    if (previewUrl) {
-      console.log(`[EMAIL PREVIEW URL]: ${previewUrl}`);
-    }
-
-    return { sent: true, messageId: info.messageId, previewUrl };
+    console.log(`[NODEMAILER SUCCESS] Email delivered to ${normalizedTo}! Message ID: ${info.messageId}`);
+    return { sent: true, messageId: info.messageId, deliveredTo: normalizedTo };
   } catch (err) {
-    console.error('[EMAIL ERROR] Failed to send email via SMTP:', err);
-    return { sent: false };
+    console.error('[NODEMAILER ERROR] Failed to send email:', (err as Error).message);
+    return { sent: false, deliveredTo: normalizedTo };
   }
 };

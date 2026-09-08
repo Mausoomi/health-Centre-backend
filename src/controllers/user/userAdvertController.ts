@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { Advert } from '../../models/Advert';
+import { Report } from '../../models/Report';
 
 /**
  * Submit a new advert campaign from workflow / checkout
@@ -386,9 +387,12 @@ export const reportAdvert = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
+    const reportId = `REP-ADV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const reasonsArray = Array.isArray(reasons) ? reasons : [reasons || 'Inappropriate content'];
+
     const reportItem = {
-      id: `rep-${Date.now()}`,
-      reasons: Array.isArray(reasons) ? reasons : [reasons || 'Inappropriate content'],
+      id: reportId,
+      reasons: reasonsArray,
       note: note || '',
       reporterEmail: reporterEmail || '',
       createdAt: new Date(),
@@ -398,10 +402,34 @@ export const reportAdvert = async (req: Request, res: Response, next: NextFuncti
     advert.reports.push(reportItem);
     await advert.save();
 
+    const locString =
+      advert.locations && advert.locations.length > 0
+        ? advert.locations.map((l: any) => `${l.region}, ${l.country}`).join('; ')
+        : advert.address || 'Nigeria';
+
+    // Create entry in central Report collection
+    await Report.create({
+      reportId,
+      itemType: 'advert',
+      itemId: advert.advertId || String(advert._id),
+      itemTitle: advert.title ? `Advert: "${advert.title}"` : `Advert: ${advert.name}`,
+      itemContent: (advert.description || '') + (advert.website ? `\nWebsite: ${advert.website}` : '') + (advert.telephone ? `\nTel: ${advert.telephone}` : ''),
+      itemImage: advert.image || '',
+      itemAuthor: advert.contactPerson || advert.name || advert.customerName || 'Advertiser',
+      itemLocation: locString,
+      reporterName: reporterEmail ? reporterEmail.split('@')[0] : 'Community Member',
+      reporterEmail: reporterEmail?.trim() || '',
+      reasons: reasonsArray,
+      note: note?.trim() || '',
+      status: 'New',
+      adminNotes: [],
+    });
+
     res.status(201).json({
       success: true,
       message: 'Advert report submitted successfully.',
       reportsCount: advert.reports.length,
+      reportId,
     });
   } catch (error) {
     next(error);

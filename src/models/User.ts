@@ -1,8 +1,25 @@
 import { Schema, model, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-export type UserRole = 'SuperAdmin' | 'Admin' | 'Provider' | 'EndUser';
-export type UserStatus = 'Active' | 'Watch' | 'Suspended' | 'Deactivated' | 'active' | 'inactive' | 'pending_mfa';
+export type UserRole =
+  | 'SuperAdmin'
+  | 'Admin'
+  | 'Provider'
+  | 'EndUser'
+  | 'Global Admin'
+  | 'Operations Admin'
+  | 'Content Admin'
+  | 'Moderation Admin';
+export type UserStatus =
+  | 'Active'
+  | 'Watch'
+  | 'Suspended'
+  | 'Deactivated'
+  | 'active'
+  | 'inactive'
+  | 'pending_mfa'
+  | 'Awaiting First Login'
+  | 'Pending';
 
 export interface IUserNote {
   id: string;

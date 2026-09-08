@@ -1,9 +1,12 @@
 import { Router } from 'express';
+import { adminAuthRoutes } from './adminAuthRoutes';
 import { adminUserRoutes } from './adminUserRoutes';
 import { adminReviewRoutes } from './adminReviewRoutes';
 import { adminContactRoutes } from './adminContactRoutes';
 import { adminAdvertRoutes } from './adminAdvertRoutes';
 import { adminVoucherRoutes } from './adminVoucherRoutes';
+import { adminNewsRoutes } from './adminNewsRoutes';
+import { adminReportRoutes } from './adminReportRoutes';
 import { requireAuth, requireRoles } from '../../middlewares/auth';
 
 const router = Router();
@@ -15,11 +18,18 @@ const router = Router();
  * ============================================================================
  */
 
+// Admin Authentication (Sign-in with email & password, MFA OTP, Profile)
+router.use('/auth', adminAuthRoutes);
+
 // Admin User Management (Free Plan registered members CRUD & status)
 router.use('/users', adminUserRoutes);
 
 // Admin Reviews Management (Community reviews moderation, notes, status)
 router.use('/reviews', adminReviewRoutes);
+
+// Admin Reports & Moderation (Unified Review, News, and Advert reports)
+router.use('/reports', adminReportRoutes);
+router.use('/moderation', adminReportRoutes);
 
 // Admin Contact Us & Inquiries Management
 router.use('/contact', adminContactRoutes);
@@ -31,6 +41,9 @@ router.use('/adverts', adminAdvertRoutes);
 // Admin Voucher Management (Vouchers list, filters, groups, creation, notices)
 router.use('/vouchers', adminVoucherRoutes);
 
+// Admin News Management (Articles CRUD, scheduling, publishing)
+router.use('/news', adminNewsRoutes);
+
 // Admin Dashboard & metrics
 router.get('/dashboard', requireAuth, requireRoles(['Admin', 'SuperAdmin', 'Global Admin', 'Operations Admin']), (req, res) => {
   res.status(200).json({
@@ -39,4 +52,14 @@ router.get('/dashboard', requireAuth, requireRoles(['Admin', 'SuperAdmin', 'Glob
 });
 
 export const adminRoutes = router;
-export { adminUserRoutes, adminReviewRoutes, adminContactRoutes, adminAdvertRoutes, adminVoucherRoutes };
+export {
+  adminAuthRoutes,
+  adminUserRoutes,
+  adminReviewRoutes,
+  adminReportRoutes,
+  adminContactRoutes,
+  adminAdvertRoutes,
+  adminVoucherRoutes,
+  adminNewsRoutes,
+};
+
