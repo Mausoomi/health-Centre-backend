@@ -2,6 +2,8 @@ import { Router } from 'express';
 import {
   register,
   login,
+  verifyEmail,
+  resendVerification,
   sendOTP,
   verifyOTP,
   refreshToken,
@@ -24,6 +26,11 @@ const router = Router();
 router.post('/register', authLimiter, register);
 router.post('/login', authLimiter, login);
 
+// Email verification & link resending
+router.get('/verify-email', verifyEmail);
+router.post('/verify-email', verifyEmail);
+router.post('/resend-verification', authLimiter, resendVerification);
+
 // Passwordless OTP send & verify
 router.post('/otp/send', authLimiter, sendOTP);
 router.post('/otp/verify', authLimiter, verifyOTP);
@@ -33,6 +40,7 @@ router.post('/refresh-token', refreshToken);
 
 // Authenticated user profile retrieval & update
 router.get('/me', requireAuth, getMe);
+router.get('/current-user', requireAuth, getMe);
 router.put('/profile', requireAuth, updateProfile);
 
 export const userAuthRoutes = router;

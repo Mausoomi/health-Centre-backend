@@ -50,7 +50,7 @@ export const submitReview = async (req: Request, res: Response, next: NextFuncti
       avatar: avatar || '',
       image: image || '',
       service: service?.trim() || 'Clinic Visit',
-      status: 'Published', // Automatically published
+      status: 'Pending', // Requires administrative moderation before publishing
       likes: 0,
       likedBy: [],
       reports: [],
@@ -59,7 +59,7 @@ export const submitReview = async (req: Request, res: Response, next: NextFuncti
 
     res.status(201).json({
       success: true,
-      message: 'Review submitted successfully',
+      message: 'Review submitted successfully and is pending administrative approval.',
       review: newReview,
     });
   } catch (error) {

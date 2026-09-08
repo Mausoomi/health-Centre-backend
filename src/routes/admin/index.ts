@@ -44,12 +44,10 @@ router.use('/vouchers', adminVoucherRoutes);
 // Admin News Management (Articles CRUD, scheduling, publishing)
 router.use('/news', adminNewsRoutes);
 
-// Admin Dashboard & metrics
-router.get('/dashboard', requireAuth, requireRoles(['Admin', 'SuperAdmin', 'Global Admin', 'Operations Admin']), (req, res) => {
-  res.status(200).json({
-    message: 'Welcome Admin! This is the live admin dashboard metrics.',
-  });
-});
+import { getAdminDashboardMetrics } from '../../controllers/admin/adminDashboardController';
+
+// Admin Dashboard & dynamic live metrics
+router.get('/dashboard', getAdminDashboardMetrics);
 
 export const adminRoutes = router;
 export {

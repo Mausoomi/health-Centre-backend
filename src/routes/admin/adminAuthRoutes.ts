@@ -32,6 +32,12 @@ router.get(
   requireRoles(['Admin', 'SuperAdmin', 'Global Admin', 'Operations Admin', 'Content Admin', 'Moderation Admin']),
   getAdminMe
 );
+router.get(
+  '/current-admin',
+  requireAuth,
+  requireRoles(['Admin', 'SuperAdmin', 'Global Admin', 'Operations Admin', 'Content Admin', 'Moderation Admin']),
+  getAdminMe
+);
 
 // Admin Sign Out
 router.post('/logout', adminLogout);

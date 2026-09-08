@@ -4,6 +4,8 @@ import {
   verifyUserOTP,
   registerUser,
   loginWithPassword,
+  verifyEmailToken,
+  resendVerificationEmail,
   getUserProfileById,
   updateUserProfileById,
 } from '../services/authService';
@@ -19,7 +21,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
-    const { accessToken, refreshToken: rToken, user } = await registerUser({
+    const result = await registerUser({
       email,
       password,
       name,
@@ -29,20 +31,15 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       country,
     });
 
-    res.cookie('refreshToken', rToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
     res.status(201).json({
-      message: 'Account created successfully',
-      accessToken,
-      user,
+      success: true,
+      isVerified: false,
+      email: result.email,
+      name: result.name,
+      message: result.message,
     });
   } catch (error) {
-    res.status(400).json({ message: (error as Error).message });
+    res.status(400).json({ success: false, message: (error as Error).message });
   }
 };
 
@@ -64,17 +61,62 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     });
 
     res.status(200).json({
+      success: true,
       message: 'Login successful',
       accessToken,
       user,
     });
-  } catch (error) {
-    const msg = (error as Error).message || '';
-    if (msg.toLowerCase().includes('suspended') || msg.toLowerCase().includes('deactivated')) {
-      res.status(403).json({ message: msg });
-    } else {
-      res.status(400).json({ message: 'Incorrect login password.' });
+  } catch (error: any) {
+    const msg = error?.message || '';
+    if (error?.code === 'EMAIL_NOT_VERIFIED' || msg.toLowerCase().includes('verify your email')) {
+      res.status(403).json({
+        success: false,
+        code: 'EMAIL_NOT_VERIFIED',
+        isVerified: false,
+        email: error?.email || req.body.email,
+        message: 'Please verify your email address first. A verification link has been sent to your email.',
+      });
+      return;
     }
+
+    if (msg.toLowerCase().includes('suspended') || msg.toLowerCase().includes('deactivated')) {
+      res.status(403).json({ success: false, message: msg });
+      return;
+    }
+
+    res.status(400).json({ success: false, message: 'Incorrect login password.' });
+  }
+};
+
+export const verifyEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const email = (req.query.email as string) || req.body.email;
+    const token = (req.query.token as string) || req.body.token;
+
+    if (!email || !token) {
+      res.status(400).json({ success: false, message: 'Email address and verification token are required.' });
+      return;
+    }
+
+    const result = await verifyEmailToken(email, token);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: (error as Error).message });
+  }
+};
+
+export const resendVerification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ success: false, message: 'Email address is required.' });
+      return;
+    }
+
+    const result = await resendVerificationEmail(email);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: (error as Error).message });
   }
 };
 

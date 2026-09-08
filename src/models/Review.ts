@@ -113,7 +113,7 @@ const ReviewSchema = new Schema<IReview>(
     status: {
       type: String,
       enum: ['Published', 'Pending', 'Hidden', 'Flagged'],
-      default: 'Published',
+      default: 'Pending',
     },
     likes: {
       type: Number,

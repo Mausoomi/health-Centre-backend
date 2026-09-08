@@ -48,6 +48,8 @@ export interface IUser extends Document {
   status: UserStatus;
   avatar?: string;
   isVerified?: boolean;
+  verificationToken?: string;
+  verificationTokenExpires?: Date;
   mfaSecret?: string;
   isMFAEnabled: boolean;
   notes?: IUserNote[];
@@ -156,7 +158,15 @@ const UserSchema = new Schema<IUser>(
     },
     isVerified: {
       type: Boolean,
-      default: true,
+      default: false,
+    },
+    verificationToken: {
+      type: String,
+      select: false,
+    },
+    verificationTokenExpires: {
+      type: Date,
+      select: false,
     },
     mfaSecret: {
       type: String,
