@@ -9,7 +9,7 @@ interface SendOtpEmailOptions {
 // Create reusable Nodemailer transporter
 let transporter: Transporter | null = null;
 
-const getTransporter = (): Transporter => {
+const getTransporter = (): Transporter | null => {
   if (transporter) return transporter;
 
   const user = process.env.SMTP_USER || '';
@@ -17,6 +17,10 @@ const getTransporter = (): Transporter => {
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = Number(process.env.SMTP_PORT) || 465;
   const secure = process.env.SMTP_SECURE !== 'false';
+
+  if (!user || !pass) {
+    return null;
+  }
 
   // If host is Gmail, use optimized Gmail service configuration
   if (host.includes('gmail') || user.endsWith('@gmail.com')) {
@@ -26,6 +30,9 @@ const getTransporter = (): Transporter => {
         user,
         pass,
       },
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 4000,
     });
     return transporter;
   }
@@ -39,6 +46,9 @@ const getTransporter = (): Transporter => {
       user,
       pass,
     },
+    connectionTimeout: 4000,
+    greetingTimeout: 4000,
+    socketTimeout: 4000,
   });
 
   return transporter;
@@ -129,6 +139,11 @@ export const sendOtpEmail = async ({
 
   try {
     const activeTransporter = getTransporter();
+    if (!activeTransporter) {
+      console.warn(`[NODEMAILER SKIPPED] No SMTP credentials configured. Generated OTP for ${normalizedTo}: ${otp}`);
+      return { sent: false, deliveredTo: normalizedTo };
+    }
+
     const info = await activeTransporter.sendMail({
       from: fromAddress,
       to: normalizedTo,
@@ -245,6 +260,11 @@ export const sendVerificationEmail = async ({
 
   try {
     const activeTransporter = getTransporter();
+    if (!activeTransporter) {
+      console.warn(`[NODEMAILER SKIPPED] No SMTP credentials configured. Verification link for ${normalizedTo}: ${verificationUrl}`);
+      return { sent: false, deliveredTo: normalizedTo };
+    }
+
     const info = await activeTransporter.sendMail({
       from: fromAddress,
       to: normalizedTo,

@@ -49,11 +49,13 @@ export const requestOTP = async (email: string): Promise<string> => {
   // Check if existing user has a name
   const existingUser = await User.findOne({ email: normalizedEmail });
 
-  // Dispatch actual email
-  await sendOtpEmail({
+  // Dispatch actual email in background
+  sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: existingUser?.name,
+  }).catch((err) => {
+    console.error('[USER OTP EMAIL ERROR]', err);
   });
 
   return generatedOTP;
@@ -195,11 +197,13 @@ export const registerUser = async (data: {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  // Send verification email via Nodemailer
-  await sendVerificationEmail({
+  // Send verification email via Nodemailer in background
+  sendVerificationEmail({
     to: normalizedEmail,
     name: user.name,
     verificationUrl,
+  }).catch((err) => {
+    console.error('[USER VERIFICATION EMAIL ERROR]', err);
   });
 
   return {
@@ -374,10 +378,12 @@ export const resendVerificationEmail = async (
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  await sendVerificationEmail({
+  sendVerificationEmail({
     to: normalizedEmail,
     name: user.name,
     verificationUrl,
+  }).catch((err) => {
+    console.error('[USER RESEND VERIFICATION EMAIL ERROR]', err);
   });
 
   return {
