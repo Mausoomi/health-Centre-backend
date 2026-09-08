@@ -45,12 +45,12 @@ export const requestOTP = async (email: string): Promise<string> => {
   // Check if existing user has a name
   const existingUser = await User.findOne({ email: normalizedEmail });
 
-  // Dispatch actual email
-  await sendOtpEmail({
+  // Dispatch actual email in background
+  sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: existingUser?.name,
-  });
+  }).catch((err) => console.error('[USER OTP EMAIL ERROR]', err));
 
   return generatedOTP;
 };

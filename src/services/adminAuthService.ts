@@ -75,7 +75,7 @@ export const seedDefaultAdmins = async () => {
 export const adminLoginWithPassword = async (
   email: string,
   plainPassword: string
-): Promise<{ email: string; name: string; role: string; firstUse: boolean; message: string }> => {
+): Promise<{ email: string; name: string; role: string; firstUse: boolean; message: string; otp: string }> => {
   const normalizedEmail = email.trim().toLowerCase();
 
   // Ensure default accounts are seeded
@@ -164,13 +164,13 @@ export const adminLoginWithPassword = async (
     { upsert: true, new: true }
   );
 
-  // Send real MFA email to the admin email address
+  // Send real MFA email in background (non-blocking) so response returns instantly
   console.log(`[ADMIN MFA OTP] Code for ${normalizedEmail}: ${generatedOTP}`);
-  await sendOtpEmail({
+  sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: user.name || 'Administrator',
-  });
+  }).catch((err) => console.error('[ADMIN MFA EMAIL ERROR]', err));
 
   return {
     email: user.email,
@@ -178,6 +178,7 @@ export const adminLoginWithPassword = async (
     role: user.role,
     firstUse: user.status === 'Awaiting First Login',
     message: `A 6-digit MFA verification code has been dispatched to ${user.email}.`,
+    otp: generatedOTP,
   };
 };
 
@@ -258,11 +259,11 @@ export const resendAdminMfa = async (email: string): Promise<string> => {
   );
 
   console.log(`[RESEND ADMIN MFA] Code for ${normalizedEmail}: ${generatedOTP}`);
-  await sendOtpEmail({
+  sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: user.name || 'Administrator',
-  });
+  }).catch((err) => console.error('[RESEND ADMIN MFA EMAIL ERROR]', err));
 
   return generatedOTP;
 };
