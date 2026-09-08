@@ -68,7 +68,12 @@ export const sendOtpEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = process.env.EMAIL_FROM || `"HealthCentreApp" <${process.env.SMTP_USER || 'no-reply@healthcentreapp.com'}>`;
+  const user = process.env.SMTP_USER || '';
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const fromAddress =
+    host.includes('gmail') || user.endsWith('@gmail.com')
+      ? `"HealthCentreApp" <${user}>`
+      : process.env.EMAIL_FROM || `"HealthCentreApp" <${user || 'no-reply@healthcentreapp.com'}>`;
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
