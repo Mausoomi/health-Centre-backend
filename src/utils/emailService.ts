@@ -21,23 +21,14 @@ const getTransporter = (): Transporter | null => {
     return null;
   }
 
-  // If host is Gmail, use Nodemailer built-in Gmail service (handles ports & TLS automatically)
-  if (host.includes('gmail') || user.endsWith('@gmail.com')) {
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user,
-        pass,
-      },
-    });
-    return transporter;
-  }
+  const isGmail = host.includes('gmail') || user.endsWith('@gmail.com');
+  const port = isGmail ? 587 : (Number(process.env.SMTP_PORT) || 587);
+  const secure = isGmail ? false : (process.env.SMTP_SECURE === 'true' && port === 465);
 
-  // Standard SMTP transport
   transporter = nodemailer.createTransport({
-    host,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
+    host: isGmail ? 'smtp.gmail.com' : host,
+    port,
+    secure,
     auth: {
       user,
       pass,
@@ -45,7 +36,10 @@ const getTransporter = (): Transporter | null => {
     tls: {
       rejectUnauthorized: false,
     },
-  });
+    connectionTimeout: 10000,
+    greetingTimeout: 5000,
+    socketTimeout: 10000,
+  } as any);
 
   return transporter;
 };
@@ -145,16 +139,24 @@ export const sendOtpEmail = async ({
       return { sent: false, deliveredTo: normalizedTo };
     }
 
-    const info = await activeTransporter.sendMail({
+    const mailOptions = {
       from: fromAddress,
       to: normalizedTo,
       subject: `Your HealthCentreApp Login Code: ${otp}`,
       text: `Your HealthCentreApp login verification code is: ${otp}. It expires in 5 minutes.`,
       html: htmlContent,
-    });
+    };
 
-    console.log(`[NODEMAILER SUCCESS] Email delivered to ${normalizedTo}! Message ID: ${info.messageId}`);
-    return { sent: true, messageId: info.messageId, deliveredTo: normalizedTo };
+    try {
+      const info = await activeTransporter.sendMail(mailOptions);
+      console.log(`[NODEMAILER SUCCESS] Email delivered to ${normalizedTo}! Message ID: ${info.messageId}`);
+      return { sent: true, messageId: info.messageId, deliveredTo: normalizedTo };
+    } catch (firstErr) {
+      console.warn(`[NODEMAILER RETRY] First attempt failed (${(firstErr as Error).message}), retrying once...`);
+      const retryInfo = await activeTransporter.sendMail(mailOptions);
+      console.log(`[NODEMAILER SUCCESS ON RETRY] Email delivered to ${normalizedTo}! Message ID: ${retryInfo.messageId}`);
+      return { sent: true, messageId: retryInfo.messageId, deliveredTo: normalizedTo };
+    }
   } catch (err) {
     console.error('[NODEMAILER ERROR] Failed to send email:', (err as Error).message);
     return { sent: false, deliveredTo: normalizedTo };
