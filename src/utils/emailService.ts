@@ -30,14 +30,11 @@ const getTransporter = (): Transporter | null => {
         user,
         pass,
       },
-      connectionTimeout: 4000,
-      greetingTimeout: 4000,
-      socketTimeout: 4000,
     });
     return transporter;
   }
 
-  // Standard SMTP transport
+  // Standard AWS SES / SMTP transport
   transporter = nodemailer.createTransport({
     host,
     port,
@@ -46,16 +43,13 @@ const getTransporter = (): Transporter | null => {
       user,
       pass,
     },
-    connectionTimeout: 4000,
-    greetingTimeout: 4000,
-    socketTimeout: 4000,
   });
 
   return transporter;
 };
 
 /**
- * Send OTP verification email using Nodemailer
+ * Send OTP verification email using AWS SES SMTP
  */
 export const sendOtpEmail = async ({
   to,
@@ -68,7 +62,7 @@ export const sendOtpEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = process.env.EMAIL_FROM || `"HealthCentreApp" <${process.env.SMTP_USER || 'dev23.mxpertz@gmail.com'}>`;
+  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -143,7 +137,6 @@ export const sendOtpEmail = async ({
       console.warn(`[NODEMAILER SKIPPED] No SMTP credentials configured. Generated OTP for ${normalizedTo}: ${otp}`);
       return { sent: false, deliveredTo: normalizedTo };
     }
-
     const info = await activeTransporter.sendMail({
       from: fromAddress,
       to: normalizedTo,
@@ -179,7 +172,7 @@ export const sendVerificationEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = process.env.EMAIL_FROM || `"HealthCentreApp" <${process.env.SMTP_USER || 'dev23.mxpertz@gmail.com'}>`;
+  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -264,7 +257,6 @@ export const sendVerificationEmail = async ({
       console.warn(`[NODEMAILER SKIPPED] No SMTP credentials configured. Verification link for ${normalizedTo}: ${verificationUrl}`);
       return { sent: false, deliveredTo: normalizedTo };
     }
-
     const info = await activeTransporter.sendMail({
       from: fromAddress,
       to: normalizedTo,

@@ -22,14 +22,8 @@ export const submitReview = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // Require user to be authenticated
-    if (!userId && !reviewerEmail) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required. You must be logged in to submit a review.',
-      });
-      return;
-    }
+    // Reviewer name fallback
+    const finalReviewerName = reviewerName?.trim() || 'Community Member';
 
     const numRating = Number(rating);
     if (numRating < 1 || numRating > 5) {
@@ -44,7 +38,7 @@ export const submitReview = async (req: Request, res: Response, next: NextFuncti
       title: reviewTitle,
       text: text.trim(),
       country: country?.trim() || 'Nigeria',
-      reviewerName: reviewerName?.trim() || 'Verified Member',
+      reviewerName: finalReviewerName,
       reviewerEmail: reviewerEmail?.trim() || '',
       userId: userId || '',
       avatar: avatar || '',

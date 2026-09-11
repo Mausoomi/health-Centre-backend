@@ -9,6 +9,7 @@ import {
   refreshToken,
   getMe,
   updateProfile,
+  changePassword,
 } from '../../controllers/authController';
 import { authLimiter } from '../../middlewares/rateLimiter';
 import { requireAuth } from '../../middlewares/auth';
@@ -42,5 +43,7 @@ router.post('/refresh-token', refreshToken);
 router.get('/me', requireAuth, getMe);
 router.get('/current-user', requireAuth, getMe);
 router.put('/profile', requireAuth, updateProfile);
+router.post('/change-password', requireAuth, changePassword);
+router.put('/change-password', requireAuth, changePassword);
 
 export const userAuthRoutes = router;

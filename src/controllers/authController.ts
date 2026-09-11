@@ -8,6 +8,7 @@ import {
   resendVerificationEmail,
   getUserProfileById,
   updateUserProfileById,
+  changeUserPassword,
 } from '../services/authService';
 import { User } from '../models/User';
 import { generateAccessToken, verifyRefreshToken } from '../utils/jwt';
@@ -283,6 +284,7 @@ export const getMe = async (req: AuthenticatedRequest, res: Response, next: Next
         role: user.role,
         status: user.status,
         avatar: user.avatar || '',
+        hasPassword: Boolean(user.password),
         createdAt: user.createdAt,
         lastActive: user.lastActive,
       },
@@ -362,5 +364,35 @@ export const updateProfile = async (req: AuthenticatedRequest, res: Response, ne
     });
   } catch (error) {
     next(error);
+  }
+};
+
+export const changePassword = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user || !req.user.userId) {
+      res.status(401).json({ message: 'Authentication required' });
+      return;
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!newPassword) {
+      res.status(400).json({ message: 'New password is required.' });
+      return;
+    }
+
+    const result = await changeUserPassword(req.user.userId, {
+      currentPassword,
+      newPassword,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: (error as Error).message || 'Failed to update password',
+    });
   }
 };

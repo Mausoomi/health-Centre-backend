@@ -49,13 +49,48 @@ export const createAdvert = async (req: Request, res: Response, next: NextFuncti
     const locs = Array.isArray(locations) ? locations : [];
 
     if (locs.length > 0) {
-      const starts = locs.map((l: any) => l.start).filter(Boolean);
+      const starts = locs.map((l: any) => l.start || l.startDate).filter(Boolean);
       if (starts.length > 0) {
         startDate = starts.sort()[0];
       }
-      const ends = locs.map((l: any) => l.endDate || l.end).filter(Boolean);
+      const ends = locs.map((l: any) => {
+        if (l.endDate || l.end) {
+          const e = String(l.endDate || l.end);
+          if (e.includes('-')) return e;
+        }
+        if ((l.start || l.startDate) && l.days) {
+          try {
+            const d = new Date((l.start || l.startDate) + 'T00:00:00');
+            d.setDate(d.getDate() + Number(l.days) - 1);
+            return d.toISOString().split('T')[0];
+          } catch {
+            return '';
+          }
+        }
+        return '';
+      }).filter(Boolean);
+
       if (ends.length > 0) {
         endDate = ends.sort().reverse()[0];
+      }
+    }
+
+    if (!startDate) {
+      startDate = req.body.startDate || new Date().toISOString().split('T')[0];
+    }
+
+    if (!endDate) {
+      if (req.body.endDate && String(req.body.endDate).includes('-')) {
+        endDate = req.body.endDate;
+      } else {
+        const days = Number(totalDays) || 200;
+        try {
+          const d = new Date(startDate.includes('T') ? startDate : startDate + 'T00:00:00');
+          d.setDate(d.getDate() + days - 1);
+          endDate = d.toISOString().split('T')[0];
+        } catch {
+          endDate = '';
+        }
       }
     }
 
@@ -193,28 +228,91 @@ export const getMyAdverts = async (req: Request, res: Response, next: NextFuncti
     const formatted = adverts.map((ad) => {
       const locString =
         ad.locations && ad.locations.length > 0
-          ? ad.locations.map((l) => `${l.region}`).join(' and ') || ad.locations[0].country
+          ? ad.locations.map((l) => `${l.region}`).filter(Boolean).join(' and ') || ad.locations[0].country
           : 'Nigeria';
 
       const countryString =
         ad.locations && ad.locations.length > 0 ? ad.locations[0].country : 'Nigeria';
 
+      // Compute effective start date
+      let effectiveStart = ad.startDate;
+      if (!effectiveStart && ad.createdAt) {
+        effectiveStart = new Date(ad.createdAt).toISOString().split('T')[0];
+      } else if (!effectiveStart) {
+        effectiveStart = new Date().toISOString().split('T')[0];
+      }
+
+      // Compute effective end date
+      let effectiveEnd = ad.endDate;
+      if (!effectiveEnd && effectiveStart) {
+        // Try calculating from locations first
+        if (ad.locations && ad.locations.length > 0) {
+          const locEnds = ad.locations.map((l: any) => {
+            if (l.endDate || l.end) return l.endDate || l.end;
+            if ((l.start || l.startDate) && l.days) {
+              try {
+                const d = new Date((l.start || l.startDate) + 'T00:00:00');
+                d.setDate(d.getDate() + Number(l.days) - 1);
+                return d.toISOString().split('T')[0];
+              } catch {
+                return '';
+              }
+            }
+            return '';
+          }).filter(Boolean);
+          if (locEnds.length > 0) {
+            effectiveEnd = locEnds.sort().reverse()[0];
+          }
+        }
+
+        if (!effectiveEnd) {
+          const days = Number(ad.totalDays) || 200;
+          try {
+            const d = new Date(effectiveStart.includes('T') ? effectiveStart : effectiveStart + 'T00:00:00');
+            d.setDate(d.getDate() + days - 1);
+            effectiveEnd = d.toISOString().split('T')[0];
+          } catch {
+            effectiveEnd = '';
+          }
+        }
+      }
+
       // Compute remaining days
       let remainingText = 'Not started';
-      if (ad.endDate) {
-        const end = new Date(ad.endDate);
-        const today = new Date();
-        const diffDays = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays > 0) {
-          remainingText = `${diffDays} days`;
-        } else {
-          remainingText = '0 days (Expired)';
+      if (effectiveEnd) {
+        try {
+          const end = new Date(effectiveEnd.includes('T') ? effectiveEnd : effectiveEnd + 'T00:00:00');
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const diffDays = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays > 1) {
+            remainingText = `${diffDays} days`;
+          } else if (diffDays === 1) {
+            remainingText = '1 day';
+          } else if (diffDays === 0) {
+            remainingText = 'Expires today';
+          } else {
+            remainingText = '0 days (Expired)';
+          }
+        } catch {
+          remainingText = 'Not started';
         }
       }
 
       let displayStatus: string = ad.status;
       if (ad.status === 'Submitted') displayStatus = 'Pending Review';
       if (ad.status === 'Approved' || ad.status === 'Published') displayStatus = 'Active';
+
+      const formatDateDisplay = (dateStr?: string) => {
+        if (!dateStr || dateStr === 'Pending approval') return '';
+        try {
+          const d = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');
+          if (isNaN(d.getTime())) return dateStr;
+          return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        } catch {
+          return dateStr;
+        }
+      };
 
       return {
         _id: String(ad._id),
@@ -229,8 +327,8 @@ export const getMyAdverts = async (req: Request, res: Response, next: NextFuncti
         details: ad.description,
         country: countryString,
         state: locString,
-        start: ad.startDate ? new Date(ad.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending approval',
-        end: ad.endDate ? new Date(ad.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending approval',
+        start: formatDateDisplay(effectiveStart) || 'Pending approval',
+        end: formatDateDisplay(effectiveEnd) || 'Pending approval',
         remaining: remainingText,
         impressions: (ad.views || 0).toLocaleString(),
         clicks: (ad.clicks || 0).toLocaleString(),

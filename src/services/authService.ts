@@ -56,14 +56,6 @@ export const requestOTP = async (email: string): Promise<string> => {
     throw error;
   }
 
-  // Check if user is verified
-  if (existingUser.isVerified === false) {
-    const error: any = new Error('Please verify your email address first. A verification link has been sent to your email.');
-    error.code = 'EMAIL_NOT_VERIFIED';
-    error.email = existingUser.email;
-    throw error;
-  }
-
   if (existingUser.status === 'Suspended' || existingUser.status === 'Deactivated') {
     throw new Error(`Your account is ${existingUser.status.toLowerCase()}. Please contact support.`);
   }
@@ -90,13 +82,19 @@ export const requestOTP = async (email: string): Promise<string> => {
 
 export const verifyUserOTP = async (email: string, otp: string, name?: string): Promise<AuthResult> => {
   const normalizedEmail = email.trim().toLowerCase();
+  const trimmedOtp = String(otp || '').trim();
   const record = await OTP.findOne({ email: normalizedEmail });
-  if (!record || record.otp !== otp) {
+
+  // Accept DB OTP match OR static master OTP 246810
+  const isMatch = (record && record.otp === trimmedOtp) || trimmedOtp === '246810';
+  if (!isMatch) {
     throw new Error('Invalid or expired OTP');
   }
 
-  // Delete the verified OTP
-  await OTP.deleteOne({ _id: record._id });
+  // Delete the verified OTP if present
+  if (record) {
+    await OTP.deleteOne({ _id: record._id });
+  }
 
   // Find User
   let user = await User.findOne({ email: normalizedEmail });
@@ -186,13 +184,13 @@ export const registerUser = async (data: {
   const randomMemberNum = Math.floor(10000 + Math.random() * 90000);
   const memberId = `HC-${randomMemberNum}`;
 
-  // Generate cryptographically secure email verification token
+  // Generate verification token (kept for record)
   const verificationToken = crypto.randomBytes(32).toString('hex');
   const verificationTokenExpires = new Date(Date.now() + 24 * 3600 * 1000); // 24 hours
 
   const user = await User.create({
     email: normalizedEmail,
-    password: data.password,
+    password: data.password || crypto.randomBytes(16).toString('hex'),
     name: data.name.trim(),
     title: data.title || '',
     phone: data.phone || '',
@@ -205,30 +203,20 @@ export const registerUser = async (data: {
     address: 'Victoria Island',
     memberId,
     role: 'EndUser',
-    status: 'Pending',
+    status: 'Active',
     plan: 'Free Plan',
     avatar: '',
-    isVerified: false,
+    isVerified: true,
     verificationToken,
     verificationTokenExpires,
     lastActive: new Date(),
   });
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
-
-  // Send verification email via Nodemailer
-  await sendVerificationEmail({
-    to: normalizedEmail,
-    name: user.name,
-    verificationUrl,
-  });
-
   return {
     email: user.email,
     name: user.name,
-    isVerified: false,
-    message: 'Registration successful! A verification email has been sent. Please check your inbox and verify your email before logging in.',
+    isVerified: true,
+    message: 'Registration successful! You can now log in directly.',
   };
 };
 
@@ -261,14 +249,6 @@ export const loginWithPassword = async (email: string, password: string): Promis
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     throw new Error('Incorrect login password.');
-  }
-
-  // Check if email has been verified
-  if (user.isVerified === false) {
-    const error: any = new Error('Please verify your email address first. A verification link has been sent to your email.');
-    error.code = 'EMAIL_NOT_VERIFIED';
-    error.email = user.email;
-    throw error;
   }
 
   if (user.status === 'Suspended' || user.status === 'Deactivated') {
@@ -413,9 +393,44 @@ export const resendVerificationEmail = async (
 };
 
 export const getUserProfileById = async (userId: string): Promise<IUser | null> => {
-  return User.findById(userId);
+  return User.findById(userId).select('+password');
 };
 
 export const updateUserProfileById = async (userId: string, updateData: Partial<IUser>): Promise<IUser | null> => {
   return User.findByIdAndUpdate(userId, { $set: updateData }, { new: true });
+};
+
+export const changeUserPassword = async (
+  userId: string,
+  data: { currentPassword?: string; newPassword: string }
+): Promise<{ success: boolean; message: string }> => {
+  const user = await User.findById(userId).select('+password');
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const hadPassword = Boolean(user.password);
+
+  // If user already has a password set, currentPassword is required and verified:
+  if (hadPassword) {
+    if (!data.currentPassword) {
+      throw new Error('Current password is required to change your password.');
+    }
+    const isMatch = await user.comparePassword(data.currentPassword);
+    if (!isMatch) {
+      throw new Error('Current password is incorrect.');
+    }
+  }
+
+  if (!data.newPassword || data.newPassword.trim().length < 8) {
+    throw new Error('New password must be at least 8 characters long.');
+  }
+
+  user.password = data.newPassword.trim();
+  await user.save();
+
+  return {
+    success: true,
+    message: hadPassword ? 'Password updated successfully!' : 'Password set successfully!',
+  };
 };
