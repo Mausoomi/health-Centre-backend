@@ -164,12 +164,14 @@ export const adminLoginWithPassword = async (
     { upsert: true, new: true }
   );
 
-  // Send real MFA email to the admin email address
+  // Send real MFA email to the admin email address in background (non-blocking so response is instant)
   console.log(`[ADMIN MFA OTP] Code for ${normalizedEmail}: ${generatedOTP}`);
-  await sendOtpEmail({
+  sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: user.name || 'Administrator',
+  }).catch((err) => {
+    console.error(`[ADMIN MFA EMAIL ERROR] Failed to send email to ${normalizedEmail}:`, err?.message);
   });
 
   return {
@@ -258,10 +260,12 @@ export const resendAdminMfa = async (email: string): Promise<string> => {
   );
 
   console.log(`[RESEND ADMIN MFA] Code for ${normalizedEmail}: ${generatedOTP}`);
-  await sendOtpEmail({
+  sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: user.name || 'Administrator',
+  }).catch((err) => {
+    console.error(`[ADMIN MFA RESEND EMAIL ERROR] Failed to send email to ${normalizedEmail}:`, err?.message);
   });
 
   return generatedOTP;

@@ -26,10 +26,16 @@ const getTransporter = (): Transporter | null => {
   if (host.includes('gmail') || user.endsWith('@gmail.com')) {
     transporter = nodemailer.createTransport({
       service: 'gmail',
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
       auth: {
         user,
         pass,
       },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 8000,
     });
     return transporter;
   }
@@ -39,10 +45,16 @@ const getTransporter = (): Transporter | null => {
     host,
     port,
     secure,
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
     auth: {
       user,
       pass,
     },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 8000,
   });
 
   return transporter;

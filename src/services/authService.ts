@@ -70,11 +70,13 @@ export const requestOTP = async (email: string): Promise<string> => {
     { upsert: true, new: true }
   );
 
-  // Dispatch actual email
-  await sendOtpEmail({
+  // Dispatch actual email asynchronously in background so OTP API responds in <50ms
+  sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: existingUser.name,
+  }).catch((err) => {
+    console.error(`[OTP EMAIL ERROR] Background dispatch failed for ${normalizedEmail}:`, err?.message);
   });
 
   return generatedOTP;
@@ -380,10 +382,12 @@ export const resendVerificationEmail = async (
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  await sendVerificationEmail({
+  sendVerificationEmail({
     to: normalizedEmail,
     name: user.name,
     verificationUrl,
+  }).catch((err) => {
+    console.error(`[VERIFICATION EMAIL ERROR] Background dispatch failed for ${normalizedEmail}:`, err?.message);
   });
 
   return {
