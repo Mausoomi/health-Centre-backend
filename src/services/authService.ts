@@ -70,12 +70,12 @@ export const requestOTP = async (email: string): Promise<string> => {
     { upsert: true, new: true }
   );
 
-  // Dispatch actual email
-  await sendOtpEmail({
+  // Dispatch actual email in non-blocking async manner for instant response
+  sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: existingUser.name,
-  });
+  }).catch((err) => console.error('[ASYNC USER OTP EMAIL ERROR]', err));
 
   return generatedOTP;
 };
@@ -380,11 +380,11 @@ export const resendVerificationEmail = async (
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  await sendVerificationEmail({
+  sendVerificationEmail({
     to: normalizedEmail,
     name: user.name,
     verificationUrl,
-  });
+  }).catch((err) => console.error('[ASYNC VERIFICATION EMAIL ERROR]', err));
 
   return {
     success: true,
@@ -471,11 +471,11 @@ export const requestPasswordReset = async (
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  await sendPasswordResetEmail({
+  sendPasswordResetEmail({
     to: normalizedEmail,
     name: user.name,
     resetUrl,
-  });
+  }).catch((err) => console.error('[ASYNC PASSWORD RESET EMAIL ERROR]', err));
 
   return {
     success: true,

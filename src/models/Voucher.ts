@@ -215,4 +215,10 @@ const VoucherSchema = new Schema<IVoucher>(
   }
 );
 
+VoucherSchema.index({ status: 1, createdAt: -1 });
+VoucherSchema.index({ code: 1 });
+VoucherSchema.index({ voucherId: 1 });
+VoucherSchema.index({ purchaserEmail: 1 });
+VoucherSchema.index({ purchaserId: 1 });
+
 export const Voucher = model<IVoucher>('Voucher', VoucherSchema);

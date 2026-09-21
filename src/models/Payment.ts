@@ -37,4 +37,8 @@ const PaymentSchema = new Schema<IPayment>(
   }
 );
 
+PaymentSchema.index({ status: 1, date: -1 });
+PaymentSchema.index({ email: 1 });
+PaymentSchema.index({ paymentId: 1 });
+
 export const Payment = model<IPayment>('Payment', PaymentSchema);

@@ -287,4 +287,9 @@ const AdvertSchema = new Schema<IAdvert>(
   }
 );
 
+AdvertSchema.index({ status: 1, createdAt: -1 });
+AdvertSchema.index({ advertId: 1 });
+AdvertSchema.index({ customerEmail: 1 });
+AdvertSchema.index({ userId: 1 });
+
 export const Advert = model<IAdvert>('Advert', AdvertSchema);

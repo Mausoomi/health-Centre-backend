@@ -121,5 +121,7 @@ const ReportSchema = new Schema<IReport>(
 );
 
 ReportSchema.index({ createdAt: -1 });
+ReportSchema.index({ status: 1, createdAt: -1 });
+ReportSchema.index({ reportId: 1 });
 
 export const Report = mongoose.model<IReport>('Report', ReportSchema);

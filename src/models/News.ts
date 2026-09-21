@@ -146,4 +146,7 @@ const NewsSchema = new Schema<INews>(
   }
 );
 
+NewsSchema.index({ status: 1, createdAt: -1 });
+NewsSchema.index({ category: 1 });
+
 export const News = model<INews>('News', NewsSchema);

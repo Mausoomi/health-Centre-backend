@@ -228,6 +228,11 @@ const UserSchema = new Schema<IUser>(
   }
 );
 
+// Indexes for fast lookup
+UserSchema.index({ role: 1, status: 1 });
+UserSchema.index({ createdAt: -1 });
+UserSchema.index({ memberId: 1 });
+
 // Hash password before saving
 UserSchema.pre('save', async function () {
   const user = this as unknown as IUser;

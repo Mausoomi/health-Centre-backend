@@ -7,12 +7,20 @@ import { CareSecureGrant } from '../models/standard/CareSecureGrant';
 import { User } from '../models/User';
 import { Types } from 'mongoose';
 
+const initializedUserIds = new Set<string>();
+
 /**
  * Ensures the authenticated user has an initialized, clean CareRecord.
  * Removes any legacy hardcoded mock/seeded entries so all data is strictly dynamic.
+ * Optimized with in-memory caching to avoid hammering MongoDB on every single request.
  */
 export async function ensureStandardUserSeed(userId: Types.ObjectId | string, userObj?: any) {
-  const uid = new Types.ObjectId(userId.toString());
+  const uidStr = userId.toString();
+  if (initializedUserIds.has(uidStr)) {
+    return;
+  }
+
+  const uid = new Types.ObjectId(uidStr);
 
   // Fetch actual user details from DB if available
   let userDoc: any = null;
@@ -324,4 +332,6 @@ export async function ensureStandardUserSeed(userId: Types.ObjectId | string, us
       trustedContactName: 'Sarah Jenkins'
     }),
   ]);
+
+  initializedUserIds.add(uidStr);
 }

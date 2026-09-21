@@ -22,6 +22,9 @@ const startServer = async () => {
     // Start Express Server
     const server = app.listen(PORT, () => {
       console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+
+      // Auto Keep-Alive Self-Ping for Render Free Tier (Prevents 50s cold-start spin-downs)
+      startKeepAlive();
     });
 
     server.on('error', (err: any) => {
@@ -30,6 +33,31 @@ const startServer = async () => {
   } catch (error) {
     console.error('Error in startServer:', error);
   }
+};
+
+const startKeepAlive = () => {
+  const renderUrl =
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.APP_URL ||
+    'https://health-centre-backend-stsx.onrender.com';
+
+  if (!renderUrl) return;
+
+  // Ping every 10 minutes (600,000 ms)
+  const PING_INTERVAL_MS = 10 * 60 * 1000;
+
+  setInterval(async () => {
+    try {
+      const pingUrl = `${renderUrl.replace(/\/$/, '')}/api/v1/health`;
+      const res = await fetch(pingUrl);
+      if (res.ok) {
+        console.log(`[KEEP-ALIVE] Pinged ${pingUrl} at ${new Date().toISOString()} (Status: ${res.status})`);
+      }
+    } catch (err: any) {
+      // Silently ignore ping errors
+      console.log(`[KEEP-ALIVE PING NOTICE] ${err?.message || 'Server ping cycle'}`);
+    }
+  }, PING_INTERVAL_MS);
 };
 
 startServer();

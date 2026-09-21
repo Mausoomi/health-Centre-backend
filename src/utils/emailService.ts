@@ -18,10 +18,15 @@ const getTransporter = (): Transporter => {
   const port = Number(process.env.SMTP_PORT) || 465;
   const secure = process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465';
 
-  // If host is Gmail, use optimized Gmail service configuration
+  // If host is Gmail, use optimized Gmail service configuration with connection pooling
   if (host.includes('gmail') || user.endsWith('@gmail.com')) {
     transporter = nodemailer.createTransport({
       service: 'gmail',
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      connectionTimeout: 10000,
+      socketTimeout: 15000,
       auth: {
         user,
         pass,
@@ -30,11 +35,16 @@ const getTransporter = (): Transporter => {
     return transporter;
   }
 
-  // Standard AWS SES / SMTP transport
+  // Standard AWS SES / SMTP transport with connection pooling
   transporter = nodemailer.createTransport({
     host,
     port,
     secure,
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    connectionTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user,
       pass,
