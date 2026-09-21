@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { OTP } from '../models/OTP';
 import { User, IUser } from '../models/User';
 import { generateAccessToken, generateRefreshToken } from '../utils/jwt';
-import { sendOtpEmail, sendVerificationEmail } from '../utils/emailService';
+import { sendOtpEmail, sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailService';
 
 export interface AuthResult {
   accessToken?: string;
@@ -70,13 +70,11 @@ export const requestOTP = async (email: string): Promise<string> => {
     { upsert: true, new: true }
   );
 
-  // Dispatch actual email asynchronously in background so OTP API responds in <50ms
-  sendOtpEmail({
+  // Dispatch actual email
+  await sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: existingUser.name,
-  }).catch((err) => {
-    console.error(`[OTP EMAIL ERROR] Background dispatch failed for ${normalizedEmail}:`, err?.message);
   });
 
   return generatedOTP;
@@ -382,12 +380,10 @@ export const resendVerificationEmail = async (
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  sendVerificationEmail({
+  await sendVerificationEmail({
     to: normalizedEmail,
     name: user.name,
     verificationUrl,
-  }).catch((err) => {
-    console.error(`[VERIFICATION EMAIL ERROR] Background dispatch failed for ${normalizedEmail}:`, err?.message);
   });
 
   return {
@@ -438,3 +434,91 @@ export const changeUserPassword = async (
     message: hadPassword ? 'Password updated successfully!' : 'Password set successfully!',
   };
 };
+
+export const requestPasswordReset = async (
+  email: string
+): Promise<{ success: boolean; message: string }> => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail });
+
+  if (!user) {
+    const error: any = new Error('This email is not registered.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    throw error;
+  }
+
+  // Strictly disallow Admin accounts from resetting through user portal
+  const isAdminAccount =
+    user.role &&
+    user.role !== 'EndUser' &&
+    (user.role.toLowerCase().includes('admin') || user.role === 'SuperAdmin');
+
+  if (isAdminAccount) {
+    const error: any = new Error('This email is not registered.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    throw error;
+  }
+
+  if (user.status === 'Suspended' || user.status === 'Deactivated') {
+    throw new Error(`Your account is ${user.status.toLowerCase()}. Please contact support.`);
+  }
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  user.resetPasswordToken = resetToken;
+  user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  await user.save();
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
+
+  await sendPasswordResetEmail({
+    to: normalizedEmail,
+    name: user.name,
+    resetUrl,
+  });
+
+  return {
+    success: true,
+    message: `A password reset link has been dispatched to ${normalizedEmail}. Please check your inbox and spam folder.`,
+  };
+};
+
+export const resetPasswordWithToken = async (
+  email: string,
+  token: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const trimmedToken = token.trim();
+
+  if (!newPassword || newPassword.trim().length < 8) {
+    throw new Error('New password must be at least 8 characters long.');
+  }
+
+  const user = await User.findOne({ email: normalizedEmail }).select(
+    '+password +resetPasswordToken +resetPasswordExpires'
+  );
+
+  if (!user) {
+    throw new Error('No registered account found with this email address.');
+  }
+
+  if (!user.resetPasswordToken || user.resetPasswordToken !== trimmedToken) {
+    throw new Error('The password reset link is invalid or has already been used.');
+  }
+
+  if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
+    throw new Error('The password reset link has expired. Please request a new reset link.');
+  }
+
+  user.password = newPassword.trim();
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpires = undefined;
+  await user.save();
+
+  return {
+    success: true,
+    message: 'Your password has been reset successfully! You can now log in with your new password.',
+  };
+};
+

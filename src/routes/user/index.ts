@@ -6,6 +6,7 @@ import { userAdvertRoutes } from './userAdvertRoutes';
 import { userVoucherRoutes } from './userVoucherRoutes';
 import { userPaymentRoutes } from './userPaymentRoutes';
 import { userNewsRoutes } from './userNewsRoutes';
+import standardRoutes from './standard';
 
 const router = Router();
 
@@ -37,6 +38,9 @@ router.use('/payments', userPaymentRoutes);
 // Public & User news
 router.use('/news', userNewsRoutes);
 
+// Standard Digital Health flow routes (/api/v1/user/standard/*)
+router.use('/standard', standardRoutes);
+
 export {
   router as userRoutes,
   userAuthRoutes,
@@ -46,5 +50,7 @@ export {
   userVoucherRoutes,
   userPaymentRoutes,
   userNewsRoutes,
+  standardRoutes,
 };
+
 

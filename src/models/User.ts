@@ -43,6 +43,8 @@ export interface IUser extends Document {
   country?: string;
   state?: string;
   address?: string;
+  marital?: string;
+  religion?: string;
   plan?: string;
   role: UserRole;
   status: UserStatus;
@@ -50,6 +52,8 @@ export interface IUser extends Document {
   isVerified?: boolean;
   verificationToken?: string;
   verificationTokenExpires?: Date;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
   mfaSecret?: string;
   isMFAEnabled: boolean;
   notes?: IUserNote[];
@@ -107,37 +111,47 @@ const UserSchema = new Schema<IUser>(
     gender: {
       type: String,
       trim: true,
-      default: 'Male',
+      default: '',
     },
     dateOfBirth: {
       type: String,
       trim: true,
-      default: '1988-05-14',
+      default: '',
     },
     bloodGroup: {
       type: String,
       trim: true,
-      default: 'O+',
+      default: '',
     },
     genotype: {
       type: String,
       trim: true,
-      default: 'AA',
+      default: '',
     },
     country: {
       type: String,
       trim: true,
-      default: 'Nigeria',
+      default: '',
     },
     state: {
       type: String,
       trim: true,
-      default: 'Lagos State',
+      default: '',
     },
     address: {
       type: String,
       trim: true,
-      default: 'Victoria Island',
+      default: '',
+    },
+    marital: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    religion: {
+      type: String,
+      trim: true,
+      default: '',
     },
     plan: {
       type: String,
@@ -165,6 +179,14 @@ const UserSchema = new Schema<IUser>(
       select: false,
     },
     verificationTokenExpires: {
+      type: Date,
+      select: false,
+    },
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+    resetPasswordExpires: {
       type: Date,
       select: false,
     },

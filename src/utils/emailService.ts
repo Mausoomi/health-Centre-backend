@@ -9,33 +9,23 @@ interface SendOtpEmailOptions {
 // Create reusable Nodemailer transporter
 let transporter: Transporter | null = null;
 
-const getTransporter = (): Transporter | null => {
+const getTransporter = (): Transporter => {
   if (transporter) return transporter;
 
   const user = process.env.SMTP_USER || '';
   const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = Number(process.env.SMTP_PORT) || 465;
-  const secure = process.env.SMTP_SECURE !== 'false';
-
-  if (!user || !pass) {
-    return null;
-  }
+  const secure = process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465';
 
   // If host is Gmail, use optimized Gmail service configuration
   if (host.includes('gmail') || user.endsWith('@gmail.com')) {
     transporter = nodemailer.createTransport({
       service: 'gmail',
-      pool: true,
-      maxConnections: 5,
-      maxMessages: 100,
       auth: {
         user,
         pass,
       },
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 8000,
     });
     return transporter;
   }
@@ -45,16 +35,10 @@ const getTransporter = (): Transporter | null => {
     host,
     port,
     secure,
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100,
     auth: {
       user,
       pass,
     },
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 8000,
   });
 
   return transporter;
@@ -145,10 +129,6 @@ export const sendOtpEmail = async ({
 
   try {
     const activeTransporter = getTransporter();
-    if (!activeTransporter) {
-      console.warn(`[NODEMAILER SKIPPED] No SMTP credentials configured. Generated OTP for ${normalizedTo}: ${otp}`);
-      return { sent: false, deliveredTo: normalizedTo };
-    }
     const info = await activeTransporter.sendMail({
       from: fromAddress,
       to: normalizedTo,
@@ -265,10 +245,6 @@ export const sendVerificationEmail = async ({
 
   try {
     const activeTransporter = getTransporter();
-    if (!activeTransporter) {
-      console.warn(`[NODEMAILER SKIPPED] No SMTP credentials configured. Verification link for ${normalizedTo}: ${verificationUrl}`);
-      return { sent: false, deliveredTo: normalizedTo };
-    }
     const info = await activeTransporter.sendMail({
       from: fromAddress,
       to: normalizedTo,
@@ -284,4 +260,121 @@ export const sendVerificationEmail = async ({
     return { sent: false, deliveredTo: normalizedTo };
   }
 };
+
+interface SendPasswordResetEmailOptions {
+  to: string;
+  name?: string;
+  resetUrl: string;
+}
+
+/**
+ * Send Password Reset Email Link
+ */
+export const sendPasswordResetEmail = async ({
+  to,
+  name,
+  resetUrl,
+}: SendPasswordResetEmailOptions): Promise<{
+  sent: boolean;
+  messageId?: string;
+  deliveredTo?: string;
+}> => {
+  const recipientName = name || to.split('@')[0] || 'Member';
+  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
+  const normalizedTo = to.trim().toLowerCase();
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Your HealthCentreApp Password</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; color: #173f42;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f7f6; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table width="100%" max-width="580" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); border: 1px solid #e5eceb;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color: #0f8f8f; padding: 32px 40px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">HealthCentreApp</h1>
+              <p style="color: #e0f2f1; margin: 6px 0 0 0; font-size: 13px;">Care &amp; Community Health Portal</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 700; color: #173f42;">Password Reset Request</h2>
+              <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: #466567;">
+                Hello <strong>${recipientName}</strong>,
+              </p>
+              <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #466567;">
+                We received a request to reset the password for your HealthCentreApp account. Click the button below to set a new password:
+              </p>
+
+              <!-- CTA Button Box -->
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${resetUrl}" target="_blank" style="background-color: #0f8f8f; color: #ffffff; text-decoration: none; padding: 15px 36px; border-radius: 12px; font-size: 15px; font-weight: 700; display: inline-block; box-shadow: 0 4px 12px rgba(15, 143, 143, 0.25);">
+                  Reset My Password &rarr;
+                </a>
+              </div>
+
+              <!-- Fallback Link -->
+              <p style="margin: 28px 0 8px 0; font-size: 12px; color: #6e888a; line-height: 1.5;">
+                If the button above does not work, copy and paste this link into your browser:
+              </p>
+              <p style="margin: 0 0 24px 0; font-size: 12px; word-break: break-all; color: #0f8f8f; background-color: #f0f7f6; padding: 12px; border-radius: 8px; border: 1px solid #d8ebe8;">
+                <a href="${resetUrl}" style="color: #0f8f8f; text-decoration: none;">${resetUrl}</a>
+              </p>
+
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #8fa5a7;">
+                &bull; This password reset link is valid for <strong>1 hour</strong>.
+              </p>
+              <p style="margin: 0; font-size: 12px; color: #8fa5a7;">
+                &bull; If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #fafcfb; padding: 20px 40px; border-top: 1px solid #edf2f1; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #8fa5a7;">
+                &copy; ${new Date().getFullYear()} HealthCentreApp. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+ </body>
+</html>
+  `;
+
+  console.log('=========================================================');
+  console.log(`[PASSWORD RESET EMAIL DISPATCH] To: ${normalizedTo} | Link: ${resetUrl}`);
+  console.log('=========================================================');
+
+  try {
+    const activeTransporter = getTransporter();
+    const info = await activeTransporter.sendMail({
+      from: fromAddress,
+      to: normalizedTo,
+      subject: `Reset your HealthCentreApp Password`,
+      text: `Hello ${recipientName},\n\nYou requested a password reset for your HealthCentreApp account. Please click the link below to set a new password:\n${resetUrl}\n\nThis link is valid for 1 hour.\n\nIf you did not make this request, please ignore this email.`,
+      html: htmlContent,
+    });
+
+    console.log(`[PASSWORD RESET EMAIL SUCCESS] Delivered to ${normalizedTo}! Message ID: ${info.messageId}`);
+    return { sent: true, messageId: info.messageId, deliveredTo: normalizedTo };
+  } catch (err) {
+    console.error('[PASSWORD RESET EMAIL ERROR] Failed to send email:', (err as Error).message);
+    return { sent: false, deliveredTo: normalizedTo };
+  }
+};
+
 

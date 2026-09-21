@@ -4,6 +4,7 @@ import {
   getPublicAdverts,
   getMyAdverts,
   getAdvertById,
+  updateUserAdvert,
   likeAdvert,
   trackClick,
   trackImpression,
@@ -31,6 +32,10 @@ router.get('/my-adverts', getMyAdverts);
 // Get single advert details
 router.get('/:id', getAdvertById);
 
+// Update / resubmit advert
+router.put('/:id', updateUserAdvert);
+router.patch('/:id', updateUserAdvert);
+
 // Like / unlike advert
 router.post('/:id/like', likeAdvert);
 
@@ -44,3 +49,4 @@ router.post('/:id/impression', trackImpression);
 router.post('/:id/report', reportAdvert);
 
 export const userAdvertRoutes = router;
+

@@ -9,8 +9,12 @@ import {
   getUserProfileById,
   updateUserProfileById,
   changeUserPassword,
+  requestPasswordReset,
+  resetPasswordWithToken,
 } from '../services/authService';
 import { User } from '../models/User';
+import { CareRecord } from '../models/standard/CareRecord';
+import { Types } from 'mongoose';
 import { generateAccessToken, verifyRefreshToken } from '../utils/jwt';
 import { AuthenticatedRequest } from '../middlewares/auth';
 
@@ -337,6 +341,59 @@ export const updateProfile = async (req: AuthenticatedRequest, res: Response, ne
       return;
     }
 
+    // Two-way synchronization with CareRecord patientDetails
+    try {
+      let bloodPart = '';
+      let rhPart = '';
+      if (updateFields.bloodGroup !== undefined) {
+        const bg = updateFields.bloodGroup || '';
+        if (bg.endsWith('+')) {
+          bloodPart = bg.slice(0, -1);
+          rhPart = 'Positive (+)';
+        } else if (bg.endsWith('-')) {
+          bloodPart = bg.slice(0, -1);
+          rhPart = 'Negative (-)';
+        } else {
+          bloodPart = bg;
+          rhPart = '';
+        }
+      }
+
+      const careRecordUpdate: any = {};
+      if (updateFields.name !== undefined) careRecordUpdate['patientDetails.name'] = updateFields.name;
+      if (updateFields.dateOfBirth !== undefined) {
+        careRecordUpdate['patientDetails.dob'] = updateFields.dateOfBirth;
+        careRecordUpdate['patientDetails.dateOfBirth'] = updateFields.dateOfBirth;
+      }
+      if (updateFields.gender !== undefined) {
+        careRecordUpdate['patientDetails.gender'] = updateFields.gender;
+        careRecordUpdate['patientDetails.sex'] = updateFields.gender;
+      }
+      if (updateFields.phone !== undefined) careRecordUpdate['patientDetails.phone'] = updateFields.phone;
+      if (updateFields.country !== undefined) careRecordUpdate['patientDetails.country'] = updateFields.country;
+      if (updateFields.state !== undefined) {
+        careRecordUpdate['patientDetails.state'] = updateFields.state;
+        careRecordUpdate['patientDetails.region'] = updateFields.state;
+      }
+      if (updateFields.address !== undefined) careRecordUpdate['patientDetails.address'] = updateFields.address;
+      if (updateFields.bloodGroup !== undefined) {
+        careRecordUpdate['patientDetails.bloodGroup'] = updateFields.bloodGroup;
+        careRecordUpdate['patientDetails.blood'] = bloodPart;
+        careRecordUpdate['patientDetails.rh'] = rhPart;
+      }
+      if (updateFields.genotype !== undefined) careRecordUpdate['patientDetails.genotype'] = updateFields.genotype;
+      if (updateFields.avatar !== undefined) careRecordUpdate['patientDetails.avatar'] = updateFields.avatar;
+
+      if (Object.keys(careRecordUpdate).length > 0) {
+        await CareRecord.findOneAndUpdate(
+          { userId: new Types.ObjectId(req.user.userId.toString()) },
+          { $set: careRecordUpdate }
+        );
+      }
+    } catch (crSyncErr) {
+      console.error('CareRecord sync error in updateProfile:', crSyncErr);
+    }
+
     res.status(200).json({
       message: 'Profile updated successfully',
       user: {
@@ -346,13 +403,13 @@ export const updateProfile = async (req: AuthenticatedRequest, res: Response, ne
         name: updated.name,
         title: updated.title || '',
         phone: updated.phone || '',
-        gender: updated.gender || 'Male',
-        dateOfBirth: updated.dateOfBirth || '1988-05-14',
-        bloodGroup: updated.bloodGroup || 'O+',
-        genotype: updated.genotype || 'AA',
-        country: updated.country || 'Nigeria',
-        state: updated.state || 'Lagos State',
-        address: updated.address || 'Victoria Island',
+        gender: updated.gender || '',
+        dateOfBirth: updated.dateOfBirth || '',
+        bloodGroup: updated.bloodGroup || '',
+        genotype: updated.genotype || '',
+        country: updated.country || '',
+        state: updated.state || '',
+        address: updated.address || '',
         plan: updated.plan || 'Free Plan',
         activePlan: updated.plan || 'Free Plan',
         role: updated.role,
@@ -396,3 +453,39 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response, n
     });
   }
 };
+
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ success: false, message: 'Email address is required.' });
+      return;
+    }
+
+    const result = await requestPasswordReset(email);
+    res.status(200).json(result);
+  } catch (error: any) {
+    const msg = error?.message || 'Failed to process password reset request.';
+    if (error?.code === 'EMAIL_NOT_REGISTERED' || msg.toLowerCase().includes('not registered')) {
+      res.status(404).json({ success: false, code: 'EMAIL_NOT_REGISTERED', message: 'This email is not registered.' });
+      return;
+    }
+    res.status(400).json({ success: false, message: msg });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { email, token, newPassword } = req.body;
+    if (!email || !token || !newPassword) {
+      res.status(400).json({ success: false, message: 'Email, token, and new password are required.' });
+      return;
+    }
+
+    const result = await resetPasswordWithToken(email, token, newPassword);
+    res.status(200).json(result);
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: (error as Error).message || 'Failed to reset password.' });
+  }
+};
+

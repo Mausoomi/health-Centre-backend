@@ -201,29 +201,96 @@ export const getPublicAdverts = async (req: Request, res: Response, next: NextFu
  */
 export const getMyAdverts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { userId, email, status } = req.query;
+    const { userId, email, advertIds, status } = req.query;
 
-    const query: any = {};
+    const conditions: any[] = [];
     if (userId && typeof userId === 'string' && userId.trim()) {
-      query.$or = [{ userId: userId.trim() }];
-      if (email && typeof email === 'string' && email.trim()) {
-        query.$or.push({ customerEmail: email.trim().toLowerCase() });
+      conditions.push({ userId: userId.trim() });
+    }
+    if (email && typeof email === 'string' && email.trim()) {
+      const cleanEmail = email.trim().toLowerCase();
+      conditions.push({ customerEmail: cleanEmail });
+      conditions.push({ email: cleanEmail });
+    }
+    if (advertIds && typeof advertIds === 'string' && advertIds.trim()) {
+      const idsList = advertIds
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (idsList.length > 0) {
+        conditions.push({ advertId: { $in: idsList } });
       }
-    } else if (email && typeof email === 'string' && email.trim()) {
-      query.customerEmail = email.trim().toLowerCase();
     }
 
+    if (conditions.length === 0) {
+      res.status(200).json({
+        success: true,
+        adverts: [],
+        stats: {
+          total: 0,
+          active: 0,
+          pending: 0,
+          changesRequired: 0,
+          completed: 0,
+          totalSpend: 0,
+        },
+      });
+      return;
+    }
+
+    const userBaseQuery: any = { $or: conditions };
+
+    // Compute live dynamic stats across all of user's campaigns
+    const allUserAdverts = await Advert.find(userBaseQuery);
+
+    let activeCount = 0;
+    let pendingCount = 0;
+    let changesRequiredCount = 0;
+    let completedCount = 0;
+    let totalSpend = 0;
+
+    allUserAdverts.forEach((ad) => {
+      const s = String(ad.status || '').toLowerCase();
+      if (s.includes('active') || s.includes('published') || s.includes('approved')) {
+        activeCount++;
+      } else if (s.includes('pending') || s.includes('submitted')) {
+        pendingCount++;
+      } else if (s.includes('change') || s.includes('required') || s.includes('rejected') || s.includes('failed')) {
+        changesRequiredCount++;
+      } else if (s.includes('expired') || s.includes('completed')) {
+        completedCount++;
+      }
+
+      const cost = typeof ad.totalCost === 'number' ? ad.totalCost : parseFloat(String(ad.totalCost || '0').replace(/[^0-9.]/g, '')) || 0;
+      totalSpend += cost;
+    });
+
+    const stats = {
+      total: allUserAdverts.length,
+      active: activeCount,
+      pending: pendingCount,
+      changesRequired: changesRequiredCount,
+      completed: completedCount,
+      totalSpend: totalSpend,
+    };
+
+    // Apply specific filter tab if selected
+    const filterQuery: any = { ...userBaseQuery };
     if (status && status !== 'All') {
       if (status === 'Active') {
-        query.status = { $in: ['Active', 'Published', 'Approved'] };
-      } else if (status === 'Pending Review' || status === 'Pending') {
-        query.status = 'Submitted';
+        filterQuery.status = { $in: ['Active', 'Published', 'Approved'] };
+      } else if (status === 'Pending Review' || status === 'Pending' || status === 'Submitted') {
+        filterQuery.status = { $in: ['Submitted', 'Pending Review'] };
+      } else if (status === 'Changes Required' || status === 'Action Needed' || status === 'Rejected') {
+        filterQuery.status = { $in: ['Changes Required', 'Rejected', 'Failed'] };
+      } else if (status === 'Completed' || status === 'Expired') {
+        filterQuery.status = { $in: ['Expired', 'Completed'] };
       } else {
-        query.status = status;
+        filterQuery.status = status;
       }
     }
 
-    const adverts = await Advert.find(query).sort('-createdAt');
+    const adverts = await Advert.find(filterQuery).sort('-createdAt');
 
     const formatted = adverts.map((ad) => {
       const locString =
@@ -323,6 +390,8 @@ export const getMyAdverts = async (req: Request, res: Response, next: NextFuncti
         status: displayStatus,
         rawStatus: ad.status,
         amount: `₦${Number(ad.totalCost || 2000).toLocaleString('en-NG')}`,
+        totalCost: Number(ad.totalCost || 2000),
+        currency: ad.currency || 'NGN',
         image: ad.image || '',
         details: ad.description,
         country: countryString,
@@ -334,6 +403,7 @@ export const getMyAdverts = async (req: Request, res: Response, next: NextFuncti
         clicks: (ad.clicks || 0).toLocaleString(),
         likes: (ad.likes || 0).toLocaleString(),
         reports: ad.reports ? String(ad.reports.length) : '0',
+        reviewReason: ad.reviewReason || '',
         paymentStatus: ad.paymentStatus,
         paymentReference: ad.paymentReference,
         locations: ad.locations,
@@ -345,6 +415,7 @@ export const getMyAdverts = async (req: Request, res: Response, next: NextFuncti
     res.status(200).json({
       success: true,
       adverts: formatted,
+      stats,
     });
   } catch (error) {
     next(error);
@@ -533,3 +604,109 @@ export const reportAdvert = async (req: Request, res: Response, next: NextFuncti
     next(error);
   }
 };
+
+/**
+ * Update and resubmit user advert campaign (e.g. after changes requested or editing)
+ * PUT /api/v1/adverts/:id
+ */
+export const updateUserAdvert = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const isObjectId = mongoose.isValidObjectId(id);
+
+    const advert = await Advert.findOne({
+      $or: [...(isObjectId ? [{ _id: id }] : []), { advertId: id }],
+    });
+
+    if (!advert) {
+      res.status(404).json({ success: false, message: 'Advert not found' });
+      return;
+    }
+
+    const {
+      name,
+      title,
+      description,
+      image,
+      address,
+      telephone,
+      email,
+      website,
+      contactPerson,
+      locations,
+      totalDays,
+    } = req.body;
+
+    if (name !== undefined) advert.name = String(name).trim();
+    if (title !== undefined) advert.title = String(title).trim();
+    if (description !== undefined) advert.description = String(description).trim();
+    if (image !== undefined) advert.image = image;
+    if (address !== undefined) advert.address = address;
+    if (telephone !== undefined) advert.telephone = telephone;
+    if (email !== undefined) advert.email = email;
+    if (website !== undefined) advert.website = website;
+    if (contactPerson !== undefined) advert.contactPerson = contactPerson;
+
+    if (Array.isArray(locations) && locations.length > 0) {
+      advert.locations = locations.map((loc: any) => ({
+        country: loc.country || 'Nigeria',
+        region: loc.region || loc.state || '',
+        start: loc.start || loc.startDate || new Date().toISOString().split('T')[0],
+        days: Math.max(1, Number(loc.days) || 1),
+        endDate: loc.endDate || loc.end || '',
+      }));
+
+      // Recompute effective start and end dates
+      const starts = advert.locations.map((l) => l.start).filter(Boolean);
+      if (starts.length > 0) {
+        advert.startDate = starts.sort()[0];
+      }
+      const ends = advert.locations.map((l) => {
+        if (l.endDate && l.endDate.includes('-')) return l.endDate;
+        if (l.start && l.days) {
+          try {
+            const d = new Date(l.start + 'T00:00:00');
+            d.setDate(d.getDate() + Number(l.days) - 1);
+            return d.toISOString().split('T')[0];
+          } catch {
+            return '';
+          }
+        }
+        return '';
+      }).filter(Boolean);
+      if (ends.length > 0) {
+        advert.endDate = ends.sort().reverse()[0];
+      }
+    }
+
+    if (totalDays !== undefined && Number(totalDays) > 0) {
+      advert.totalDays = Number(totalDays);
+    }
+
+    // Set status to 'Submitted' so admin re-reviews the updated campaign
+    advert.status = 'Submitted';
+
+    // If there was an admin review note / request for changes, record it in history and clear active reviewReason
+    if (advert.reviewReason) {
+      if (!advert.adminNotes) advert.adminNotes = [];
+      advert.adminNotes.push({
+        id: `NOTE-${Date.now()}`,
+        note: `Previous Change Request: "${advert.reviewReason}" (Resubmitted by user on ${new Date().toLocaleDateString()})`,
+        createdBy: 'System (User Resubmission)',
+        createdAt: new Date(),
+      });
+      advert.reviewReason = '';
+    }
+
+    await advert.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Advert updated and resubmitted for review successfully.',
+      advert,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

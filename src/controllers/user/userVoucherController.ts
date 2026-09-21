@@ -122,7 +122,7 @@ export const purchaseVouchers = async (req: Request, res: Response, next: NextFu
  */
 export const getMyVouchers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { userId, email, status } = req.query;
+    const { userId, email, voucherIds, status } = req.query;
 
     const conditions: any[] = [];
     if (userId && typeof userId === 'string' && userId.trim()) {
@@ -133,8 +133,31 @@ export const getMyVouchers = async (req: Request, res: Response, next: NextFunct
       conditions.push({ purchaserEmail: cleanEmail });
       conditions.push({ redeemerEmail: cleanEmail });
     }
+    if (voucherIds && typeof voucherIds === 'string' && voucherIds.trim()) {
+      const idsList = voucherIds
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (idsList.length > 0) {
+        conditions.push({ voucherId: { $in: idsList } });
+      }
+    }
 
-    let query: any = conditions.length > 0 ? { $or: conditions } : {};
+    if (conditions.length === 0) {
+      res.status(200).json({
+        success: true,
+        vouchers: [],
+        summary: {
+          purchased: 0,
+          available: 0,
+          redeemed: 0,
+          expired: 0,
+        },
+      });
+      return;
+    }
+
+    let query: any = { $or: conditions };
 
     if (status && status !== 'All') {
       query.status = status;
@@ -143,7 +166,7 @@ export const getMyVouchers = async (req: Request, res: Response, next: NextFunct
     const vouchers = await Voucher.find(query).sort('-createdAt');
 
     // Compute live metric counters
-    const allUserVouchers = conditions.length > 0 ? await Voucher.find({ $or: conditions }) : vouchers;
+    const allUserVouchers = await Voucher.find({ $or: conditions });
 
     const purchasedCount = allUserVouchers.length;
     const availableCount = allUserVouchers.filter((v) => v.status === 'Available' || v.status === 'Unredeemed').length;

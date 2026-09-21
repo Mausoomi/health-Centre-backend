@@ -10,6 +10,8 @@ import {
   getMe,
   updateProfile,
   changePassword,
+  forgotPassword,
+  resetPassword,
 } from '../../controllers/authController';
 import { authLimiter } from '../../middlewares/rateLimiter';
 import { requireAuth } from '../../middlewares/auth';
@@ -31,6 +33,10 @@ router.post('/login', authLimiter, login);
 router.get('/verify-email', verifyEmail);
 router.post('/verify-email', verifyEmail);
 router.post('/resend-verification', authLimiter, resendVerification);
+
+// Forgot Password & Reset Password
+router.post('/forgot-password', authLimiter, forgotPassword);
+router.post('/reset-password', authLimiter, resetPassword);
 
 // Passwordless OTP send & verify
 router.post('/otp/send', authLimiter, sendOTP);
