@@ -70,10 +70,38 @@ const getTransporter = (): Transporter => {
   return transporter;
 };
 
-const sanitizeFromAddress = (defaultFrom: string): string => {
+export const getFromAddress = (defaultFrom: string): string => {
   const envFrom = process.env.EMAIL_FROM;
-  if (!envFrom) return defaultFrom;
-  return envFrom.trim().replace(/^"|"$/g, '').trim() || defaultFrom;
+  if (!envFrom || !envFrom.trim()) return defaultFrom;
+  let clean = envFrom.trim();
+  // Strip outer quotes if entire string was wrapped: '"HealthCentreApp <info@healthcentreapp.com>"'
+  if (clean.startsWith('"') && clean.endsWith('"') && !clean.slice(1, -1).includes('"')) {
+    clean = clean.slice(1, -1).trim();
+  }
+  return clean || defaultFrom;
+};
+
+/**
+ * Diagnostic helper to verify SMTP connection & send test email
+ */
+export const testEmailConnection = async (testTo?: string) => {
+  const activeTransporter = getTransporter();
+  await activeTransporter.verify();
+  let sendResult = null;
+  if (testTo) {
+    const fromAddress = getFromAddress('"HealthCentreApp" <info@healthcentreapp.com>');
+    sendResult = await activeTransporter.sendMail({
+      from: fromAddress,
+      to: testTo.trim().toLowerCase(),
+      subject: 'HealthCentreApp Email Diagnostic Test',
+      text: 'This is a test email confirming your SMTP / AWS SES connection is fully working.',
+      html: '<b>This is a test email confirming your SMTP / AWS SES connection is fully working.</b>',
+    });
+  }
+  return {
+    verified: true,
+    sendResult,
+  };
 };
 
 /**
@@ -90,7 +118,7 @@ export const sendOtpEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = sanitizeFromAddress('HealthCentreApp <info@healthcentreapp.com>');
+  const fromAddress = getFromAddress('HealthCentreApp <info@healthcentreapp.com>');
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -196,7 +224,7 @@ export const sendVerificationEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = sanitizeFromAddress('HealthCentreApp <info@healthcentreapp.com>');
+  const fromAddress = getFromAddress('HealthCentreApp <info@healthcentreapp.com>');
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -312,7 +340,7 @@ export const sendPasswordResetEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = sanitizeFromAddress('HealthCentreApp <info@healthcentreapp.com>');
+  const fromAddress = getFromAddress('HealthCentreApp <info@healthcentreapp.com>');
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -435,7 +463,7 @@ export const sendCareSecureInvitationEmail = async ({
   messageId?: string;
   deliveredTo?: string;
 }> => {
-  const fromAddress = sanitizeFromAddress('HealthCentreApp CareSecure <info@healthcentreapp.com>');
+  const fromAddress = getFromAddress('HealthCentreApp CareSecure <info@healthcentreapp.com>');
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `

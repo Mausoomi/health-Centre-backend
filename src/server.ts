@@ -19,8 +19,8 @@ const startServer = async () => {
     // Seed / ensure admin accounts exist
     await seedDefaultAdmins();
 
-    // Start Express Server
-    const server = app.listen(PORT, () => {
+    // Start Express Server - bind explicitly to 0.0.0.0 for cloud hosting (Render)
+    const server = app.listen(Number(PORT), '0.0.0.0', () => {
       console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
     });
 

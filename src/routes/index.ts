@@ -22,11 +22,38 @@ const router = Router();
  * ============================================================================
  */
 
+import { testEmailConnection } from '../utils/emailService';
+
 /* -------------------------------------------------------------------------- */
 /*                        1. HEALTH & DIAGNOSTICS                             */
 /* -------------------------------------------------------------------------- */
 router.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date() });
+});
+
+router.get('/test-email', async (req, res) => {
+  try {
+    const to = (req.query.to as string) || (req.query.email as string);
+    const result = await testEmailConnection(to);
+    res.status(200).json({
+      success: true,
+      message: to
+        ? `SMTP verified and test email sent to ${to}`
+        : 'SMTP connection verified successfully',
+      result,
+    });
+  } catch (err: any) {
+    console.error('[DIAGNOSTIC TEST EMAIL ERROR]', err);
+    res.status(500).json({
+      success: false,
+      message: 'SMTP Email Test Failed',
+      error: err.message,
+      code: err.code,
+      command: err.command,
+      response: err.response,
+      responseCode: err.responseCode,
+    });
+  }
 });
 
 // Public CareSecure Token Shared Access
