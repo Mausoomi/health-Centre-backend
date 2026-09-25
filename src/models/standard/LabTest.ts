@@ -7,6 +7,8 @@ export interface ITestResultItem {
   value: string;
   unit?: string;
   referenceRange?: string;
+  resultDate?: string;
+  notes?: string;
   status?: string;
 }
 
@@ -17,6 +19,8 @@ export interface ILabAttachment {
   originalFilename?: string;
   mimeType?: string;
   fileUrl?: string;
+  url?: string;
+  type?: string;
   size?: string;
 }
 
@@ -46,6 +50,8 @@ const TestResultItemSchema = new Schema<ITestResultItem>(
     value: { type: String, required: true },
     unit: { type: String, default: '' },
     referenceRange: { type: String, default: '' },
+    resultDate: { type: String, default: '' },
+    notes: { type: String, default: '' },
     status: { type: String, default: 'Normal' },
   },
   { _id: true }
@@ -59,6 +65,8 @@ const LabAttachmentSchema = new Schema<ILabAttachment>(
     originalFilename: { type: String },
     mimeType: { type: String },
     fileUrl: { type: String },
+    url: { type: String },
+    type: { type: String },
     size: { type: String },
   },
   { _id: false }

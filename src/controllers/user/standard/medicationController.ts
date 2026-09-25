@@ -13,8 +13,9 @@ export const getMedications = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
 
+    const uid = new Types.ObjectId(userId.toString());
     await ensureStandardUserSeed(userId, req.user);
-    const medications = await Medication.find({ userId: new Types.ObjectId(userId.toString()) }).sort({ createdAt: -1 });
+    const medications = await Medication.find({ userId: uid }).sort({ createdAt: -1 }).lean();
 
     res.status(200).json({
       success: true,
@@ -42,7 +43,7 @@ export const getMedicationById = async (req: AuthenticatedRequest, res: Response
       query.medicationId = id;
     }
 
-    const med = await Medication.findOne(query);
+    const med = await Medication.findOne(query).lean();
     if (!med) {
       res.status(404).json({ message: 'Medication not found' });
       return;

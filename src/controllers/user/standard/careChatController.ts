@@ -13,8 +13,9 @@ export const getCareChatHistory = async (req: AuthenticatedRequest, res: Respons
       return;
     }
 
+    const uid = new Types.ObjectId(userId.toString());
     await ensureStandardUserSeed(userId, req.user);
-    const shares = await CareChatShare.find({ userId: new Types.ObjectId(userId.toString()) }).sort({ createdAt: -1 });
+    const shares = await CareChatShare.find({ userId: uid }).sort({ createdAt: -1 }).lean();
 
     res.status(200).json({
       success: true,

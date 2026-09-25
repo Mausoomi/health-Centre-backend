@@ -12,6 +12,8 @@ import {
 } from './user';
 import { requireAuth } from '../middlewares/auth';
 
+import publicCareSecureRoutes from './public/publicCareSecureRoutes';
+
 const router = Router();
 
 /**
@@ -26,6 +28,9 @@ const router = Router();
 router.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date() });
 });
+
+// Public CareSecure Token Shared Access
+router.use('/public/caresecure', publicCareSecureRoutes);
 
 /* -------------------------------------------------------------------------- */
 /*                        2. USER SIDE ROUTES                                 */

@@ -1,8 +1,27 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../../../middlewares/auth';
 import { CareSecureGrant } from '../../../models/standard/CareSecureGrant';
+import { User } from '../../../models/User';
 import { ensureStandardUserSeed } from '../../../services/standardSeedService';
+import { sendCareSecureInvitationEmail } from '../../../utils/emailService';
 import { Types } from 'mongoose';
+import crypto from 'crypto';
+
+const computeExpiryDate = (durationStr: string): Date => {
+  const now = new Date();
+  if (durationStr?.includes('24 hours')) {
+    return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  } else if (durationStr?.includes('7 days')) {
+    return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  } else if (durationStr?.includes('90 days')) {
+    return new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  } else if (durationStr?.includes('30 days')) {
+    return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  } else if (durationStr && !isNaN(Date.parse(durationStr))) {
+    return new Date(durationStr);
+  }
+  return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+};
 
 // List all CareSecure access grants
 export const getCareSecureGrants = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -13,8 +32,9 @@ export const getCareSecureGrants = async (req: AuthenticatedRequest, res: Respon
       return;
     }
 
+    const uid = new Types.ObjectId(userId.toString());
     await ensureStandardUserSeed(userId, req.user);
-    const grants = await CareSecureGrant.find({ userId: new Types.ObjectId(userId.toString()) }).sort({ createdAt: -1 });
+    const grants = await CareSecureGrant.find({ userId: uid }).sort({ createdAt: -1 }).lean();
 
     res.status(200).json({
       success: true,
@@ -42,7 +62,7 @@ export const getCareSecureGrantById = async (req: AuthenticatedRequest, res: Res
       query.accessId = id;
     }
 
-    const grant = await CareSecureGrant.findOne(query);
+    const grant = await CareSecureGrant.findOne(query).lean();
     if (!grant) {
       res.status(404).json({ message: 'Access grant not found' });
       return;
@@ -66,8 +86,45 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
       return;
     }
 
+    const grantorUser = await User.findById(userId).lean();
+    const grantorName = grantorUser?.name || req.user?.name || 'Patient';
+
     const accessId = `CS-${Date.now().toString().slice(-6)}`;
     const grantedTime = new Date().toLocaleString();
+    const grantToken = crypto.randomBytes(32).toString('hex');
+    const grantTokenExpiresAt = computeExpiryDate(req.body.expires || '30 days');
+
+    const clientBaseUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const accessUrl = `${clientBaseUrl}/caresecure/shared-access/${grantToken}`;
+
+    const recipientContact = req.body.recipientContact || '';
+    const isEmailMethod = (req.body.invitationMethod || '').toLowerCase().includes('email') || recipientContact.includes('@');
+
+    let emailSentStatus = false;
+    let invitationLogDetail = `${grantedTime} · HealthCentreApp · ${req.body.invitationMethod || 'Invitation link created'}`;
+
+    if (isEmailMethod && recipientContact) {
+      const featureNames = (req.body.featurePermissions || [])
+        .map((fp: any) => `${fp.featureName} (${(fp.rights || []).join(', ')})`)
+        .join(', ') || 'CareRecord, Medication';
+
+      const emailRes = await sendCareSecureInvitationEmail({
+        to: recipientContact,
+        recipientName: req.body.name || 'Caregiver',
+        grantorName,
+        accessLevel: req.body.accessLevel || 'Support',
+        duration: req.body.expires || '30 days',
+        accessUrl,
+        featuresSummary: featureNames,
+      });
+
+      emailSentStatus = emailRes.sent;
+      if (emailSentStatus) {
+        invitationLogDetail = `${grantedTime} · HealthCentreApp · Secure access email dispatched to ${recipientContact}`;
+      } else {
+        invitationLogDetail = `${grantedTime} · HealthCentreApp · Failed to send email to ${recipientContact}, fallback link generated`;
+      }
+    }
 
     const auditLogs = [
       {
@@ -77,7 +134,7 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
       },
       {
         title: 'Invitation Sent',
-        detail: `${grantedTime} · HealthCentreApp · ${req.body.invitationMethod || 'WhatsApp secure link sent to recipient'}`,
+        detail: invitationLogDetail,
         timestamp: new Date().toISOString(),
       },
     ];
@@ -86,15 +143,21 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
       ...req.body,
       userId: new Types.ObjectId(userId.toString()),
       accessId,
+      grantToken,
+      grantTokenExpiresAt,
       grantedAt: grantedTime,
       status: 'Pending Verification',
+      invitationMethod: isEmailMethod ? `Email sent to ${recipientContact}` : (req.body.invitationMethod || 'Secure link created'),
       auditLogs,
     });
 
     res.status(201).json({
       success: true,
-      message: 'CareSecure delegate access granted',
+      message: emailSentStatus
+        ? 'CareSecure access granted & invitation email sent successfully'
+        : 'CareSecure access granted',
       data: newGrant,
+      accessUrl,
     });
   } catch (error) {
     res.status(500).json({ message: 'Error granting access', error: (error as Error).message });

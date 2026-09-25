@@ -14,8 +14,9 @@ export const getCareRecord = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
+    const uid = new Types.ObjectId(userId.toString());
     await ensureStandardUserSeed(userId, req.user);
-    const careRecord = await CareRecord.findOne({ userId: new Types.ObjectId(userId.toString()) });
+    const careRecord = await CareRecord.findOne({ userId: uid }).lean();
 
     res.status(200).json({
       success: true,
@@ -35,9 +36,10 @@ export const updatePatientDetails = async (req: AuthenticatedRequest, res: Respo
       return;
     }
 
+    const uid = new Types.ObjectId(userId.toString());
     await ensureStandardUserSeed(userId, req.user);
-    const existing = await CareRecord.findOne({ userId: new Types.ObjectId(userId.toString()) });
-    const existingPd = existing?.patientDetails || ({} as any);
+    const existing = await CareRecord.findOne({ userId: uid }).select('patientDetails').lean();
+    const existingPd = (existing as any)?.patientDetails || {};
 
     // Compute unified bloodGroup from blood and rh
     let computedBloodGroup = req.body.bloodGroup || existingPd.bloodGroup || '';
@@ -61,38 +63,40 @@ export const updatePatientDetails = async (req: AuthenticatedRequest, res: Respo
     };
 
     const updated = await CareRecord.findOneAndUpdate(
-      { userId: new Types.ObjectId(userId.toString()) },
+      { userId: uid },
       { $set: { patientDetails: mergedPd } },
       { new: true }
-    );
+    ).lean();
 
-    // Two-way synchronization with User document
-    try {
-      const userUpdate: any = {};
-      if (mergedPd.bloodGroup !== undefined) userUpdate.bloodGroup = mergedPd.bloodGroup;
-      if (mergedPd.country !== undefined) userUpdate.country = mergedPd.country;
-      if (mergedPd.region !== undefined) userUpdate.state = mergedPd.region;
-      if (mergedPd.state !== undefined) userUpdate.state = mergedPd.state;
-      if (mergedPd.address !== undefined) userUpdate.address = mergedPd.address;
-      if (mergedPd.marital !== undefined) userUpdate.marital = mergedPd.marital;
-      if (mergedPd.religion !== undefined) userUpdate.religion = mergedPd.religion;
-      if (mergedPd.dob !== undefined) userUpdate.dateOfBirth = mergedPd.dob;
-      if (mergedPd.dateOfBirth !== undefined) userUpdate.dateOfBirth = mergedPd.dateOfBirth;
-      if (mergedPd.gender !== undefined) userUpdate.gender = mergedPd.gender;
-      if (mergedPd.sex !== undefined) userUpdate.gender = mergedPd.sex;
-      if (mergedPd.genotype !== undefined) userUpdate.genotype = mergedPd.genotype;
+    // Async two-way synchronization with User document in background
+    (async () => {
+      try {
+        const userUpdate: any = {};
+        if (mergedPd.bloodGroup !== undefined) userUpdate.bloodGroup = mergedPd.bloodGroup;
+        if (mergedPd.country !== undefined) userUpdate.country = mergedPd.country;
+        if (mergedPd.region !== undefined) userUpdate.state = mergedPd.region;
+        if (mergedPd.state !== undefined) userUpdate.state = mergedPd.state;
+        if (mergedPd.address !== undefined) userUpdate.address = mergedPd.address;
+        if (mergedPd.marital !== undefined) userUpdate.marital = mergedPd.marital;
+        if (mergedPd.religion !== undefined) userUpdate.religion = mergedPd.religion;
+        if (mergedPd.dob !== undefined) userUpdate.dateOfBirth = mergedPd.dob;
+        if (mergedPd.dateOfBirth !== undefined) userUpdate.dateOfBirth = mergedPd.dateOfBirth;
+        if (mergedPd.gender !== undefined) userUpdate.gender = mergedPd.gender;
+        if (mergedPd.sex !== undefined) userUpdate.gender = mergedPd.sex;
+        if (mergedPd.genotype !== undefined) userUpdate.genotype = mergedPd.genotype;
 
-      if (Object.keys(userUpdate).length > 0) {
-        await User.findByIdAndUpdate(new Types.ObjectId(userId.toString()), { $set: userUpdate });
+        if (Object.keys(userUpdate).length > 0) {
+          await User.findByIdAndUpdate(uid, { $set: userUpdate });
+        }
+      } catch (uSyncErr) {
+        console.error('User sync error in updatePatientDetails:', uSyncErr);
       }
-    } catch (uSyncErr) {
-      console.error('User sync error in updatePatientDetails:', uSyncErr);
-    }
+    })();
 
     res.status(200).json({
       success: true,
       message: 'Patient details updated successfully',
-      data: updated?.patientDetails,
+      data: (updated as any)?.patientDetails,
       bloodGroup: computedBloodGroup,
     });
   } catch (error) {
@@ -100,7 +104,7 @@ export const updatePatientDetails = async (req: AuthenticatedRequest, res: Respo
   }
 };
 
-// Generic helper for Subsection CRUD
+// Generic helper for Subsection CRUD (Add)
 export const addSubsectionItem = (sectionKey: string) => {
   return async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
@@ -110,18 +114,19 @@ export const addSubsectionItem = (sectionKey: string) => {
         return;
       }
 
+      const uid = new Types.ObjectId(userId.toString());
       await ensureStandardUserSeed(userId, req.user);
-      const newItem = { ...req.body };
+      const newItem = { ...req.body, _id: new Types.ObjectId() };
       if (sectionKey === 'disabilities') {
         newItem.title = newItem.title || newItem.name || '';
         newItem.name = newItem.name || newItem.title || '';
       }
 
       const record = await CareRecord.findOneAndUpdate(
-        { userId: new Types.ObjectId(userId.toString()) },
+        { userId: uid },
         { $push: { [sectionKey]: { $each: [newItem], $position: 0 } } },
         { new: true }
-      );
+      ).lean();
 
       res.status(201).json({
         success: true,
@@ -134,6 +139,7 @@ export const addSubsectionItem = (sectionKey: string) => {
   };
 };
 
+// Generic helper for Subsection CRUD (Update)
 export const updateSubsectionItem = (sectionKey: string) => {
   return async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
@@ -145,34 +151,43 @@ export const updateSubsectionItem = (sectionKey: string) => {
       }
 
       const uid = new Types.ObjectId(userId.toString());
-      const record = await CareRecord.findOne({ userId: uid });
-      if (!record) {
-        res.status(404).json({ message: 'CareRecord not found' });
-        return;
-      }
-
-      const list = (record as any)[sectionKey] || [];
-      const itemIndex = list.findIndex((item: any) => item._id?.toString() === itemId || item.id?.toString() === itemId);
-
-      if (itemIndex === -1) {
-        res.status(404).json({ message: `Item not found in ${sectionKey}` });
-        return;
-      }
-
       const updateData = { ...req.body };
       if (sectionKey === 'disabilities') {
         updateData.title = updateData.title || updateData.name || '';
         updateData.name = updateData.name || updateData.title || '';
       }
 
-      Object.assign(list[itemIndex], updateData);
-      record.markModified(sectionKey);
-      await record.save();
+      const record = await CareRecord.findOne({ userId: uid }).lean();
+      if (!record) {
+        res.status(404).json({ message: 'CareRecord not found' });
+        return;
+      }
+
+      const list = (record as any)[sectionKey] || [];
+      const itemIndex = list.findIndex((item: any) => (item._id?.toString() === itemId || item.id?.toString() === itemId));
+
+      if (itemIndex === -1) {
+        res.status(404).json({ message: `Item not found in ${sectionKey}` });
+        return;
+      }
+
+      const setFields: Record<string, any> = {};
+      Object.keys(updateData).forEach((key) => {
+        if (key !== '_id') {
+          setFields[`${sectionKey}.${itemIndex}.${key}`] = updateData[key];
+        }
+      });
+
+      const updated = await CareRecord.findOneAndUpdate(
+        { userId: uid },
+        { $set: setFields },
+        { new: true }
+      ).lean();
 
       res.status(200).json({
         success: true,
         message: `Item updated in ${sectionKey} successfully`,
-        data: list,
+        data: (updated as any)?.[sectionKey] || list,
       });
     } catch (error) {
       res.status(500).json({ message: `Error updating in ${sectionKey}`, error: (error as Error).message });
@@ -180,6 +195,7 @@ export const updateSubsectionItem = (sectionKey: string) => {
   };
 };
 
+// Generic helper for Subsection CRUD (Delete)
 export const deleteSubsectionItem = (sectionKey: string) => {
   return async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
@@ -200,7 +216,7 @@ export const deleteSubsectionItem = (sectionKey: string) => {
         { userId: uid },
         { $pull: { [sectionKey]: pullFilter } },
         { new: true }
-      );
+      ).lean();
 
       if (updated) {
         res.status(200).json({
@@ -211,27 +227,10 @@ export const deleteSubsectionItem = (sectionKey: string) => {
         return;
       }
 
-      // Fallback
-      const record = await CareRecord.findOne({ userId: uid });
-      if (!record) {
-        res.status(404).json({ message: 'CareRecord not found' });
-        return;
-      }
-
-      const list = (record as any)[sectionKey] || [];
-      const filtered = list.filter((item: any) => {
-        const idStr = (item._id || item.id || '').toString();
-        return idStr !== itemId;
-      });
-
-      (record as any)[sectionKey] = filtered;
-      record.markModified(sectionKey);
-      await record.save();
-
       res.status(200).json({
         success: true,
         message: `Item removed from ${sectionKey} successfully`,
-        data: (record as any)?.[sectionKey],
+        data: [],
       });
     } catch (error) {
       res.status(500).json({ message: `Error deleting from ${sectionKey}`, error: (error as Error).message });
@@ -248,8 +247,9 @@ export const getCareRecordSummary = async (req: AuthenticatedRequest, res: Respo
       return;
     }
 
+    const uid = new Types.ObjectId(userId.toString());
     await ensureStandardUserSeed(userId, req.user);
-    const careRecord = await CareRecord.findOne({ userId: new Types.ObjectId(userId.toString()) });
+    const careRecord = await CareRecord.findOne({ userId: uid }).lean();
 
     const getLogTimestamp = (item: any) => {
       if (!item) return 0;

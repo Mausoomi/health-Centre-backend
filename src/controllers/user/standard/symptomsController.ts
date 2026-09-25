@@ -13,8 +13,9 @@ export const getSymptomReports = async (req: AuthenticatedRequest, res: Response
       return;
     }
 
+    const uid = new Types.ObjectId(userId.toString());
     await ensureStandardUserSeed(userId, req.user);
-    const reports = await SymptomReport.find({ userId: new Types.ObjectId(userId.toString()) }).sort({ createdAt: -1 });
+    const reports = await SymptomReport.find({ userId: uid }).sort({ createdAt: -1 }).lean();
 
     res.status(200).json({
       success: true,
@@ -42,7 +43,7 @@ export const getSymptomReportById = async (req: AuthenticatedRequest, res: Respo
       query.reportId = id;
     }
 
-    const report = await SymptomReport.findOne(query);
+    const report = await SymptomReport.findOne(query).lean();
     if (!report) {
       res.status(404).json({ message: 'Symptom report not found' });
       return;

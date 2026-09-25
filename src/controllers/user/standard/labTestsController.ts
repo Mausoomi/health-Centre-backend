@@ -13,8 +13,9 @@ export const getLabTests = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
+    const uid = new Types.ObjectId(userId.toString());
     await ensureStandardUserSeed(userId, req.user);
-    const labTests = await LabTest.find({ userId: new Types.ObjectId(userId.toString()) }).sort({ createdAt: -1 });
+    const labTests = await LabTest.find({ userId: uid }).sort({ createdAt: -1 }).lean();
 
     res.status(200).json({
       success: true,
@@ -42,7 +43,7 @@ export const getLabTestById = async (req: AuthenticatedRequest, res: Response): 
       query.labReportId = id;
     }
 
-    const test = await LabTest.findOne(query);
+    const test = await LabTest.findOne(query).lean();
     if (!test) {
       res.status(404).json({ message: 'Lab report not found' });
       return;

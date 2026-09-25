@@ -4,7 +4,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDev ? 1000 : 100, // 100 attempts per 15 min in production
+  max: isDev ? 1000 : 20, // 1000 for local dev / testing, 20 for production
   message: {
     message: 'Too many authentication attempts. Please try again after 15 minutes.',
   },
@@ -15,7 +15,7 @@ export const authLimiter = rateLimit({
 
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDev ? 10000 : 2000, // 2000 requests per 15 min in production
+  max: isDev ? 5000 : 200,
   message: {
     message: 'Too many requests. Please slow down.',
   },

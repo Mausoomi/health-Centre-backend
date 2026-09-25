@@ -158,13 +158,23 @@ export interface IWeightHeightLog {
 export interface IMedicalDocument {
   _id?: Types.ObjectId;
   title: string;
+  name?: string;
   category: string;
-  dateUploaded: string;
-  fileName: string;
+  type?: string;
+  dateUploaded?: string;
+  date?: string;
+  approximate?: boolean;
+  fileName?: string;
   fileSize?: string;
   fileUrl?: string;
+  url?: string;
   uploadedBy?: string;
-  privacy: 'Standard' | 'Private';
+  source?: string;
+  description?: string;
+  notes?: string;
+  privacy?: 'Standard' | 'Private';
+  isPrivate?: boolean;
+  attachments?: IAttachment[];
 }
 
 export interface ICareRecord extends Document {
@@ -383,14 +393,24 @@ const WeightHeightLogSchema = new Schema<IWeightHeightLog>({
 });
 
 const MedicalDocumentSchema = new Schema<IMedicalDocument>({
-  title: { type: String, required: true },
-  category: { type: String, required: true },
+  title: { type: String, default: '' },
+  name: { type: String, default: '' },
+  category: { type: String, default: '' },
+  type: { type: String, default: '' },
   dateUploaded: { type: String, default: () => new Date().toISOString().split('T')[0] },
-  fileName: { type: String, required: true },
-  fileSize: { type: String },
-  fileUrl: { type: String },
-  uploadedBy: { type: String },
+  date: { type: String, default: '' },
+  approximate: { type: Boolean, default: false },
+  fileName: { type: String, default: '' },
+  fileSize: { type: String, default: '' },
+  fileUrl: { type: String, default: '' },
+  url: { type: String, default: '' },
+  uploadedBy: { type: String, default: '' },
+  source: { type: String, default: '' },
+  description: { type: String, default: '' },
+  notes: { type: String, default: '' },
   privacy: { type: String, enum: ['Standard', 'Private'], default: 'Standard' },
+  isPrivate: { type: Boolean, default: false },
+  attachments: [AttachmentSchema],
 });
 
 const CareRecordSchema = new Schema<ICareRecord>(

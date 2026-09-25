@@ -8,9 +8,6 @@ import { apiLimiter } from './middlewares/rateLimiter';
 
 const app = express();
 
-// Enable trust proxy for Render / reverse proxy deployments
-app.set('trust proxy', 1);
-
 // Set security HTTP headers
 app.use(helmet());
 

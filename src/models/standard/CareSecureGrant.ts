@@ -16,6 +16,8 @@ export interface ICareSecureAuditLog {
 export interface ICareSecureGrant extends Document {
   userId: Types.ObjectId;
   accessId: string;
+  grantToken?: string;
+  grantTokenExpiresAt?: Date;
   name: string;
   type: string;
   organisation: string;
@@ -58,6 +60,8 @@ const CareSecureGrantSchema = new Schema<ICareSecureGrant>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     accessId: { type: String, required: true, unique: true, index: true },
+    grantToken: { type: String, sparse: true, index: true },
+    grantTokenExpiresAt: { type: Date },
     name: { type: String, required: true },
     type: { type: String, default: 'Healthcare Professional' },
     organisation: { type: String, default: '' },

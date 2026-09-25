@@ -139,6 +139,4 @@ const ReviewSchema = new Schema<IReview>(
   }
 );
 
-ReviewSchema.index({ status: 1, createdAt: -1 });
-
 export const Review = model<IReview>('Review', ReviewSchema);

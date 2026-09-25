@@ -56,6 +56,14 @@ export const requestOTP = async (email: string): Promise<string> => {
     throw error;
   }
 
+  // Check if email is verified
+  if (existingUser.isVerified === false) {
+    const error: any = new Error('Your email address is not verified yet. Please click the verification link sent to your registered email address before logging in.');
+    error.code = 'EMAIL_NOT_VERIFIED';
+    error.email = existingUser.email;
+    throw error;
+  }
+
   if (existingUser.status === 'Suspended' || existingUser.status === 'Deactivated') {
     throw new Error(`Your account is ${existingUser.status.toLowerCase()}. Please contact support.`);
   }
@@ -70,12 +78,12 @@ export const requestOTP = async (email: string): Promise<string> => {
     { upsert: true, new: true }
   );
 
-  // Dispatch actual email in non-blocking async manner for instant response
-  sendOtpEmail({
+  // Dispatch actual email
+  await sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: existingUser.name,
-  }).catch((err) => console.error('[ASYNC USER OTP EMAIL ERROR]', err));
+  });
 
   return generatedOTP;
 };
@@ -115,12 +123,19 @@ export const verifyUserOTP = async (email: string, otp: string, name?: string): 
     throw error;
   }
 
+  // Strictly block if not verified
+  if (user.isVerified === false) {
+    const error: any = new Error('Your email address is not verified yet. Please click the verification link sent to your registered email address before logging in.');
+    error.code = 'EMAIL_NOT_VERIFIED';
+    error.email = user.email;
+    throw error;
+  }
+
   if (user.status === 'Suspended' || user.status === 'Deactivated') {
     throw new Error(`Your account has been ${user.status.toLowerCase()}. Please contact support.`);
   }
 
   try {
-    user.isVerified = true;
     user.status = 'Active';
     user.lastActive = new Date();
     await user.save();
@@ -184,7 +199,7 @@ export const registerUser = async (data: {
   const randomMemberNum = Math.floor(10000 + Math.random() * 90000);
   const memberId = `HC-${randomMemberNum}`;
 
-  // Generate verification token (kept for record)
+  // Generate verification token (valid for 24 hours)
   const verificationToken = crypto.randomBytes(32).toString('hex');
   const verificationTokenExpires = new Date(Date.now() + 24 * 3600 * 1000); // 24 hours
 
@@ -203,20 +218,30 @@ export const registerUser = async (data: {
     address: 'Victoria Island',
     memberId,
     role: 'EndUser',
-    status: 'Active',
+    status: 'Pending',
     plan: 'Free Plan',
     avatar: '',
-    isVerified: true,
+    isVerified: false,
     verificationToken,
     verificationTokenExpires,
     lastActive: new Date(),
   });
 
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
+
+  // Send the verification link email via AWS SES
+  await sendVerificationEmail({
+    to: normalizedEmail,
+    name: user.name,
+    verificationUrl,
+  });
+
   return {
     email: user.email,
     name: user.name,
-    isVerified: true,
-    message: 'Registration successful! You can now log in directly.',
+    isVerified: false,
+    message: 'Registration successful! A verification link has been sent to your email. Please verify your email before logging in.',
   };
 };
 
@@ -249,6 +274,14 @@ export const loginWithPassword = async (email: string, password: string): Promis
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     throw new Error('Incorrect login password.');
+  }
+
+  // Strictly block login if user email is unverified
+  if (user.isVerified === false) {
+    const error: any = new Error('Your email address is not verified yet. Please click the verification link sent to your registered email address before logging in.');
+    error.code = 'EMAIL_NOT_VERIFIED';
+    error.email = user.email;
+    throw error;
   }
 
   if (user.status === 'Suspended' || user.status === 'Deactivated') {
@@ -380,11 +413,11 @@ export const resendVerificationEmail = async (
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  sendVerificationEmail({
+  await sendVerificationEmail({
     to: normalizedEmail,
     name: user.name,
     verificationUrl,
-  }).catch((err) => console.error('[ASYNC VERIFICATION EMAIL ERROR]', err));
+  });
 
   return {
     success: true,
@@ -471,11 +504,11 @@ export const requestPasswordReset = async (
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
-  sendPasswordResetEmail({
+  await sendPasswordResetEmail({
     to: normalizedEmail,
     name: user.name,
     resetUrl,
-  }).catch((err) => console.error('[ASYNC PASSWORD RESET EMAIL ERROR]', err));
+  });
 
   return {
     success: true,

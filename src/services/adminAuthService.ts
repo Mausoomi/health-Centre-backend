@@ -43,12 +43,13 @@ const DEFAULT_ADMINS = [
  */
 export const seedDefaultAdmins = async () => {
   for (const def of DEFAULT_ADMINS) {
-    const existing = await User.findOne({ email: def.email.toLowerCase() });
+    let existing = await User.findOne({ email: def.email.toLowerCase() });
     if (!existing) {
+      const hashedPassword = await bcrypt.hash(def.password, 10);
       await User.create({
         email: def.email.toLowerCase(),
         name: def.name,
-        password: def.password,
+        password: hashedPassword,
         role: def.role as any,
         status: def.status as any,
         title: def.title,
@@ -56,6 +57,14 @@ export const seedDefaultAdmins = async () => {
         isMFAEnabled: true,
       });
       console.log(`[ADMIN SEED] Created admin account: ${def.email}`);
+    } else {
+      const isMatch = await bcrypt.compare(def.password, existing.password || '');
+      if (!isMatch && existing.password !== def.password) {
+        existing.password = await bcrypt.hash(def.password, 10);
+      }
+      existing.role = 'Global Admin' as any;
+      existing.status = 'Active' as any;
+      await existing.save();
     }
   }
 };
@@ -66,17 +75,21 @@ export const seedDefaultAdmins = async () => {
 export const adminLoginWithPassword = async (
   email: string,
   plainPassword: string
-): Promise<{ email: string; name: string; role: string; firstUse: boolean; message: string; otp?: string }> => {
+): Promise<{ email: string; name: string; role: string; firstUse: boolean; message: string }> => {
   const normalizedEmail = email.trim().toLowerCase();
+
+  // Ensure default accounts are seeded
+  await seedDefaultAdmins();
 
   let user = await User.findOne({ email: normalizedEmail });
 
   // Special check for user's explicit requested admin credentials if not already created
   if (!user && normalizedEmail === 'admin.healthcentre@mailinator.com') {
+    const hashedPassword = await bcrypt.hash('Admin@123', 10);
     user = await User.create({
       email: normalizedEmail,
       name: 'Admin HealthCentre',
-      password: 'Admin@123',
+      password: hashedPassword,
       role: 'Global Admin',
       status: 'Active',
       isVerified: true,
@@ -119,7 +132,7 @@ export const adminLoginWithPassword = async (
       isMatch = user.password === plainPassword;
       // Upgrade plain password to hashed
       if (isMatch) {
-        user.password = plainPassword;
+        user.password = await bcrypt.hash(plainPassword, 10);
         await user.save();
       }
     }
@@ -132,7 +145,7 @@ export const adminLoginWithPassword = async (
     );
     if (matchingDef) {
       isMatch = true;
-      user.password = plainPassword;
+      user.password = await bcrypt.hash(plainPassword, 10);
       await user.save();
     }
   }
@@ -151,13 +164,13 @@ export const adminLoginWithPassword = async (
     { upsert: true, new: true }
   );
 
-  // Non-blocking async email dispatch for instant sub-50ms API response
+  // Send real MFA email to the admin email address
   console.log(`[ADMIN MFA OTP] Code for ${normalizedEmail}: ${generatedOTP}`);
-  sendOtpEmail({
+  await sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: user.name || 'Administrator',
-  }).catch((err) => console.error('[ASYNC ADMIN MFA EMAIL ERROR]', err));
+  });
 
   return {
     email: user.email,
@@ -165,7 +178,6 @@ export const adminLoginWithPassword = async (
     role: user.role,
     firstUse: user.status === 'Awaiting First Login',
     message: `A 6-digit MFA verification code has been dispatched to ${user.email}.`,
-    otp: process.env.NODE_ENV !== 'production' ? generatedOTP : undefined,
   };
 };
 
@@ -246,11 +258,11 @@ export const resendAdminMfa = async (email: string): Promise<string> => {
   );
 
   console.log(`[RESEND ADMIN MFA] Code for ${normalizedEmail}: ${generatedOTP}`);
-  sendOtpEmail({
+  await sendOtpEmail({
     to: normalizedEmail,
     otp: generatedOTP,
     name: user.name || 'Administrator',
-  }).catch((err) => console.error('[ASYNC RESEND ADMIN MFA EMAIL ERROR]', err));
+  });
 
   return generatedOTP;
 };

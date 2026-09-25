@@ -201,6 +201,17 @@ export const verifyOTP = async (req: Request, res: Response, next: NextFunction)
     });
   } catch (error: any) {
     const msg = error?.message || '';
+    if (error?.code === 'EMAIL_NOT_VERIFIED' || msg.toLowerCase().includes('verify your email') || msg.toLowerCase().includes('not verified')) {
+      res.status(403).json({
+        success: false,
+        code: 'EMAIL_NOT_VERIFIED',
+        isVerified: false,
+        email: error?.email || req.body.email,
+        message: 'Please verify your email address first. A verification link has been sent to your email.',
+      });
+      return;
+    }
+
     if (error?.code === 'EMAIL_NOT_REGISTERED' || msg.toLowerCase().includes('not registered')) {
       res.status(404).json({
         success: false,

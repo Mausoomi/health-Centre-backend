@@ -139,9 +139,6 @@ const ContactInquirySchema = new Schema<IContactInquiry>(
   }
 );
 
-ContactInquirySchema.index({ status: 1, createdAt: -1 });
-ContactInquirySchema.index({ ticketId: 1 });
-
 // Auto-fill sender and content before saving if not present
 ContactInquirySchema.pre('save', function () {
   const self = this as unknown as IContactInquiry;
