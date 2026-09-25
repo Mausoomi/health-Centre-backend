@@ -227,7 +227,7 @@ export const registerUser = async (data: {
     lastActive: new Date(),
   });
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
   // Send the verification link email via AWS SES
@@ -410,7 +410,7 @@ export const resendVerificationEmail = async (
   user.verificationTokenExpires = new Date(Date.now() + 24 * 3600 * 1000); // 24 hours
   await user.save();
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
   await sendVerificationEmail({
@@ -501,7 +501,7 @@ export const requestPasswordReset = async (
   user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
   await user.save();
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
   const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
   await sendPasswordResetEmail({

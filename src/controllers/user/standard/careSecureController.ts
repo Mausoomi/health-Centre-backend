@@ -94,7 +94,7 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
     const grantToken = crypto.randomBytes(32).toString('hex');
     const grantTokenExpiresAt = computeExpiryDate(req.body.expires || '30 days');
 
-    const clientBaseUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientBaseUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
     const accessUrl = `${clientBaseUrl}/caresecure/shared-access/${grantToken}`;
 
     const recipientContact = req.body.recipientContact || '';

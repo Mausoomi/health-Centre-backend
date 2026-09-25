@@ -15,7 +15,10 @@ const getTransporter = (): Transporter => {
   const user = process.env.SMTP_USER || '';
   const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
   const host = process.env.SMTP_HOST || 'email-smtp.eu-west-2.amazonaws.com';
-  const port = Number(process.env.SMTP_PORT) || 587;
+  const rawPort = Number(process.env.SMTP_PORT) || 465;
+  const isAwsSes = host.includes('amazonaws.com');
+  // On cloud platforms (Render/Node 24), AWS SES port 465 with SSL and IPv4 avoids firewalls & DNS timeouts
+  const port = isAwsSes && rawPort === 587 ? 465 : rawPort;
   const isSslPort = port === 465;
   const secure = process.env.SMTP_SECURE === 'true' || isSslPort;
 
@@ -35,11 +38,12 @@ const getTransporter = (): Transporter => {
       maxMessages: 100,
       connectionTimeout: 10000,
       socketTimeout: 15000,
+      family: 4,
       auth: {
         user,
         pass,
       },
-    });
+    } as any);
     return transporter;
   }
 
@@ -47,12 +51,13 @@ const getTransporter = (): Transporter => {
   transporter = nodemailer.createTransport({
     host,
     port,
-    secure: isSslPort,
+    secure: isSslPort || secure,
     pool: true,
     maxConnections: 5,
     maxMessages: 100,
     connectionTimeout: 10000,
     socketTimeout: 15000,
+    family: 4, // Enforce IPv4 to eliminate Node 24 / Render IPv6 connection timeout
     auth: {
       user,
       pass,
@@ -60,7 +65,7 @@ const getTransporter = (): Transporter => {
     tls: {
       rejectUnauthorized: false,
     },
-  });
+  } as any);
 
   return transporter;
 };
