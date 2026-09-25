@@ -14,9 +14,10 @@ let lastPass = '';
 const getTransporter = (): Transporter => {
   const user = process.env.SMTP_USER || '';
   const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = Number(process.env.SMTP_PORT) || 465;
-  const secure = process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465';
+  const host = process.env.SMTP_HOST || 'email-smtp.eu-west-2.amazonaws.com';
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const isSslPort = port === 465;
+  const secure = process.env.SMTP_SECURE === 'true' || isSslPort;
 
   if (transporter && lastUser === user && lastPass === pass) {
     return transporter;
@@ -29,6 +30,11 @@ const getTransporter = (): Transporter => {
   if (host.includes('gmail') || user.endsWith('@gmail.com')) {
     transporter = nodemailer.createTransport({
       service: 'gmail',
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      connectionTimeout: 10000,
+      socketTimeout: 15000,
       auth: {
         user,
         pass,
@@ -41,14 +47,28 @@ const getTransporter = (): Transporter => {
   transporter = nodemailer.createTransport({
     host,
     port,
-    secure,
+    secure: isSslPort,
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    connectionTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user,
       pass,
     },
+    tls: {
+      rejectUnauthorized: false,
+    },
   });
 
   return transporter;
+};
+
+const sanitizeFromAddress = (defaultFrom: string): string => {
+  const envFrom = process.env.EMAIL_FROM;
+  if (!envFrom) return defaultFrom;
+  return envFrom.trim().replace(/^"|"$/g, '').trim() || defaultFrom;
 };
 
 /**
@@ -65,7 +85,7 @@ export const sendOtpEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
+  const fromAddress = sanitizeFromAddress('HealthCentreApp <info@healthcentreapp.com>');
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -171,7 +191,7 @@ export const sendVerificationEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
+  const fromAddress = sanitizeFromAddress('HealthCentreApp <info@healthcentreapp.com>');
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -287,7 +307,7 @@ export const sendPasswordResetEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
+  const fromAddress = sanitizeFromAddress('HealthCentreApp <info@healthcentreapp.com>');
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -410,7 +430,7 @@ export const sendCareSecureInvitationEmail = async ({
   messageId?: string;
   deliveredTo?: string;
 }> => {
-  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp CareSecure" <info@healthcentreapp.com>';
+  const fromAddress = sanitizeFromAddress('HealthCentreApp CareSecure <info@healthcentreapp.com>');
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `

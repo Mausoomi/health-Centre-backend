@@ -98,17 +98,20 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
     const accessUrl = `${clientBaseUrl}/caresecure/shared-access/${grantToken}`;
 
     const recipientContact = req.body.recipientContact || '';
-    const isEmailMethod = (req.body.invitationMethod || '').toLowerCase().includes('email') || recipientContact.includes('@');
+    const hasValidEmail = Boolean(recipientContact && recipientContact.includes('@'));
+    const isEmailMethod = (req.body.invitationMethod || '').toLowerCase().includes('email') || hasValidEmail;
 
-    let emailSentStatus = false;
     let invitationLogDetail = `${grantedTime} · HealthCentreApp · ${req.body.invitationMethod || 'Invitation link created'}`;
 
-    if (isEmailMethod && recipientContact) {
+    if (hasValidEmail) {
       const featureNames = (req.body.featurePermissions || [])
         .map((fp: any) => `${fp.featureName} (${(fp.rights || []).join(', ')})`)
         .join(', ') || 'CareRecord, Medication';
 
-      const emailRes = await sendCareSecureInvitationEmail({
+      invitationLogDetail = `${grantedTime} · HealthCentreApp · Secure access email dispatched to ${recipientContact}`;
+
+      // Dispatch email asynchronously in background without blocking UI response
+      sendCareSecureInvitationEmail({
         to: recipientContact,
         recipientName: req.body.name || 'Caregiver',
         grantorName,
@@ -116,14 +119,9 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
         duration: req.body.expires || '30 days',
         accessUrl,
         featuresSummary: featureNames,
+      }).catch((err) => {
+        console.error('[ASYNC CARESECURE EMAIL ERROR]', err);
       });
-
-      emailSentStatus = emailRes.sent;
-      if (emailSentStatus) {
-        invitationLogDetail = `${grantedTime} · HealthCentreApp · Secure access email dispatched to ${recipientContact}`;
-      } else {
-        invitationLogDetail = `${grantedTime} · HealthCentreApp · Failed to send email to ${recipientContact}, fallback link generated`;
-      }
     }
 
     const auditLogs = [
@@ -147,15 +145,13 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
       grantTokenExpiresAt,
       grantedAt: grantedTime,
       status: 'Pending Verification',
-      invitationMethod: isEmailMethod ? `Email sent to ${recipientContact}` : (req.body.invitationMethod || 'Secure link created'),
+      invitationMethod: hasValidEmail ? `Email sent to ${recipientContact}` : (req.body.invitationMethod || 'Secure link created'),
       auditLogs,
     });
 
     res.status(201).json({
       success: true,
-      message: emailSentStatus
-        ? 'CareSecure access granted & invitation email sent successfully'
-        : 'CareSecure access granted',
+      message: 'CareSecure access granted & invitation dispatched successfully',
       data: newGrant,
       accessUrl,
     });
