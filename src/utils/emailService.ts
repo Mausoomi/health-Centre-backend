@@ -15,18 +15,31 @@ const getTransporter = (): Transporter => {
   const user = process.env.SMTP_USER || '';
   const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
   const host = process.env.SMTP_HOST || 'email-smtp.eu-west-2.amazonaws.com';
-  const rawPort = Number(process.env.SMTP_PORT) || 465;
+  const rawPort = Number(process.env.SMTP_PORT) || 2465;
   const isAwsSes = host.includes('amazonaws.com');
-  // On cloud platforms (Render/Node 24), AWS SES port 465 with direct SSL avoids firewalls & DNS timeouts
-  const port = isAwsSes && rawPort === 587 ? 465 : rawPort;
-  const isSslPort = port === 465;
-  const secure = process.env.SMTP_SECURE === 'true' || isSslPort;
+  
+  // Render Free explicitly blocks standard SMTP outbound ports 25, 465, and 587.
+  // AWS SES officially provides Port 2465 (SSL Wrapper) and Port 2587 (STARTTLS) to bypass cloud SMTP blocks.
+  let port = rawPort;
+  let secure = process.env.SMTP_SECURE === 'true';
+
+  if (isAwsSes) {
+    if (rawPort === 465 || rawPort === 2465 || !process.env.SMTP_PORT) {
+      port = 2465; // AWS SES Alternate Implicit TLS (SSL) port -> unblocked by Render
+      secure = true;
+    } else if (rawPort === 587 || rawPort === 2587) {
+      port = 2587; // AWS SES Alternate STARTTLS port -> unblocked by Render
+      secure = false;
+    }
+  } else {
+    secure = port === 465 || secure;
+  }
 
   // Direct Nodemailer transport for instant, reliable delivery on cloud instances
   return nodemailer.createTransport({
     host: host.includes('gmail') || user.endsWith('@gmail.com') ? 'smtp.gmail.com' : host,
     port,
-    secure: isSslPort || secure,
+    secure,
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
