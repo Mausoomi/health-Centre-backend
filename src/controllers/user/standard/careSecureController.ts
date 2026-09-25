@@ -110,18 +110,20 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
 
       invitationLogDetail = `${grantedTime} · HealthCentreApp · Secure access email dispatched to ${recipientContact}`;
 
-      // Dispatch email asynchronously in background without blocking UI response
-      sendCareSecureInvitationEmail({
-        to: recipientContact,
-        recipientName: req.body.name || 'Caregiver',
-        grantorName,
-        accessLevel: req.body.accessLevel || 'Support',
-        duration: req.body.expires || '30 days',
-        accessUrl,
-        featuresSummary: featureNames,
-      }).catch((err) => {
-        console.error('[ASYNC CARESECURE EMAIL ERROR]', err);
-      });
+      try {
+        const emailResult = await sendCareSecureInvitationEmail({
+          to: recipientContact,
+          recipientName: req.body.name || 'Caregiver',
+          grantorName,
+          accessLevel: req.body.accessLevel || 'Support',
+          duration: req.body.expires || '30 days',
+          accessUrl,
+          featuresSummary: featureNames,
+        });
+        console.log('[CARESECURE EMAIL INVITATION DISPATCHED]', emailResult);
+      } catch (emailErr) {
+        console.error('[CARESECURE EMAIL INVITATION ERROR]', emailErr);
+      }
     }
 
     const auditLogs = [

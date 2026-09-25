@@ -17,45 +17,18 @@ const getTransporter = (): Transporter => {
   const host = process.env.SMTP_HOST || 'email-smtp.eu-west-2.amazonaws.com';
   const rawPort = Number(process.env.SMTP_PORT) || 465;
   const isAwsSes = host.includes('amazonaws.com');
-  // On cloud platforms (Render/Node 24), AWS SES port 465 with SSL and IPv4 avoids firewalls & DNS timeouts
+  // On cloud platforms (Render/Node 24), AWS SES port 465 with direct SSL avoids firewalls & DNS timeouts
   const port = isAwsSes && rawPort === 587 ? 465 : rawPort;
   const isSslPort = port === 465;
   const secure = process.env.SMTP_SECURE === 'true' || isSslPort;
 
-  if (transporter && lastUser === user && lastPass === pass) {
-    return transporter;
-  }
-
-  lastUser = user;
-  lastPass = pass;
-
-  // If host is Gmail, use optimized Gmail service configuration
-  if (host.includes('gmail') || user.endsWith('@gmail.com')) {
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      pool: true,
-      maxConnections: 5,
-      maxMessages: 100,
-      connectionTimeout: 10000,
-      socketTimeout: 15000,
-      family: 4,
-      auth: {
-        user,
-        pass,
-      },
-    } as any);
-    return transporter;
-  }
-
-  // Standard AWS SES / SMTP transport
-  transporter = nodemailer.createTransport({
-    host,
+  // Direct Nodemailer transport for instant, reliable delivery on cloud instances
+  return nodemailer.createTransport({
+    host: host.includes('gmail') || user.endsWith('@gmail.com') ? 'smtp.gmail.com' : host,
     port,
     secure: isSslPort || secure,
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100,
     connectionTimeout: 10000,
+    greetingTimeout: 10000,
     socketTimeout: 15000,
     family: 4, // Enforce IPv4 to eliminate Node 24 / Render IPv6 connection timeout
     auth: {
@@ -66,8 +39,6 @@ const getTransporter = (): Transporter => {
       rejectUnauthorized: false,
     },
   } as any);
-
-  return transporter;
 };
 
 export const getFromAddress = (defaultFrom: string): string => {
