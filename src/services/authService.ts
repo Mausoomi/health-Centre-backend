@@ -188,6 +188,8 @@ export const registerUser = async (data: {
   phone?: string;
   gender?: string;
   country?: string;
+  referralCode?: string;
+  referredByCode?: string;
 }): Promise<{ email: string; name: string; isVerified: boolean; message: string }> => {
   const normalizedEmail = data.email.trim().toLowerCase();
 
@@ -226,6 +228,17 @@ export const registerUser = async (data: {
     verificationTokenExpires,
     lastActive: new Date(),
   });
+
+  // Check and credit referral code if provided
+  const targetRefCode = data.referralCode || data.referredByCode;
+  if (targetRefCode) {
+    try {
+      const { recordReferralCredit } = await import('../controllers/user/premium/referralController');
+      await recordReferralCredit(targetRefCode, user.name);
+    } catch (err) {
+      console.error('Error auto-crediting referral on registration:', err);
+    }
+  }
 
   const frontendUrl = process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;

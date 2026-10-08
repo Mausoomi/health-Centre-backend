@@ -3,7 +3,7 @@ import { createAdvertCheckoutSession, verifyStripeSession } from '../services/st
 
 export const createStripeSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { advertId, title, budget, currency, customerEmail, customerName, originUrl, advertData } = req.body;
+    const { advertId, title, budget, currency, customerEmail, customerName, originUrl, advertData, orderType } = req.body;
     if (!customerEmail) {
       res.status(400).json({ message: 'Customer email is required for payment checkout.' });
       return;
@@ -18,6 +18,7 @@ export const createStripeSession = async (req: Request, res: Response, next: Nex
       customerName,
       originUrl: originUrl || req.headers.origin || 'https://healthcentreapp.netlify.app',
       advertData,
+      orderType,
     });
 
     res.status(200).json({

@@ -7,6 +7,7 @@ import { userVoucherRoutes } from './userVoucherRoutes';
 import { userPaymentRoutes } from './userPaymentRoutes';
 import { userNewsRoutes } from './userNewsRoutes';
 import standardRoutes from './standard';
+import premiumRoutes from './premium';
 
 const router = Router();
 
@@ -41,6 +42,9 @@ router.use('/news', userNewsRoutes);
 // Standard Digital Health flow routes (/api/v1/user/standard/*)
 router.use('/standard', standardRoutes);
 
+// Premium Digital Health flow routes (/api/v1/user/premium/*)
+router.use('/premium', premiumRoutes);
+
 export {
   router as userRoutes,
   userAuthRoutes,
@@ -51,6 +55,7 @@ export {
   userPaymentRoutes,
   userNewsRoutes,
   standardRoutes,
+  premiumRoutes,
 };
 
 

@@ -94,35 +94,35 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
     const grantToken = crypto.randomBytes(32).toString('hex');
     const grantTokenExpiresAt = computeExpiryDate(req.body.expires || '30 days');
 
-    const clientBaseUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
+    const clientBaseUrl = process.env.CLIENT_URL || 'http://localhost:3000';
     const accessUrl = `${clientBaseUrl}/caresecure/shared-access/${grantToken}`;
 
     const recipientContact = req.body.recipientContact || '';
-    const hasValidEmail = Boolean(recipientContact && recipientContact.includes('@'));
-    const isEmailMethod = (req.body.invitationMethod || '').toLowerCase().includes('email') || hasValidEmail;
+    const isEmailMethod = (req.body.invitationMethod || '').toLowerCase().includes('email') || recipientContact.includes('@');
 
+    let emailSentStatus = false;
     let invitationLogDetail = `${grantedTime} · HealthCentreApp · ${req.body.invitationMethod || 'Invitation link created'}`;
 
-    if (hasValidEmail) {
+    if (isEmailMethod && recipientContact) {
       const featureNames = (req.body.featurePermissions || [])
         .map((fp: any) => `${fp.featureName} (${(fp.rights || []).join(', ')})`)
         .join(', ') || 'CareRecord, Medication';
 
-      invitationLogDetail = `${grantedTime} · HealthCentreApp · Secure access email dispatched to ${recipientContact}`;
+      const emailRes = await sendCareSecureInvitationEmail({
+        to: recipientContact,
+        recipientName: req.body.name || 'Caregiver',
+        grantorName,
+        accessLevel: req.body.accessLevel || 'Support',
+        duration: req.body.expires || '30 days',
+        accessUrl,
+        featuresSummary: featureNames,
+      });
 
-      try {
-        const emailResult = await sendCareSecureInvitationEmail({
-          to: recipientContact,
-          recipientName: req.body.name || 'Caregiver',
-          grantorName,
-          accessLevel: req.body.accessLevel || 'Support',
-          duration: req.body.expires || '30 days',
-          accessUrl,
-          featuresSummary: featureNames,
-        });
-        console.log('[CARESECURE EMAIL INVITATION DISPATCHED]', emailResult);
-      } catch (emailErr) {
-        console.error('[CARESECURE EMAIL INVITATION ERROR]', emailErr);
+      emailSentStatus = emailRes.sent;
+      if (emailSentStatus) {
+        invitationLogDetail = `${grantedTime} · HealthCentreApp · Secure access email dispatched to ${recipientContact}`;
+      } else {
+        invitationLogDetail = `${grantedTime} · HealthCentreApp · Failed to send email to ${recipientContact}, fallback link generated`;
       }
     }
 
@@ -147,13 +147,15 @@ export const createCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
       grantTokenExpiresAt,
       grantedAt: grantedTime,
       status: 'Pending Verification',
-      invitationMethod: hasValidEmail ? `Email sent to ${recipientContact}` : (req.body.invitationMethod || 'Secure link created'),
+      invitationMethod: isEmailMethod ? `Email sent to ${recipientContact}` : (req.body.invitationMethod || 'Secure link created'),
       auditLogs,
     });
 
     res.status(201).json({
       success: true,
-      message: 'CareSecure access granted & invitation dispatched successfully',
+      message: emailSentStatus
+        ? 'CareSecure access granted & invitation email sent successfully'
+        : 'CareSecure access granted',
       data: newGrant,
       accessUrl,
     });
@@ -245,3 +247,37 @@ export const revokeCareSecureGrant = async (req: AuthenticatedRequest, res: Resp
     res.status(500).json({ message: 'Error revoking grant', error: (error as Error).message });
   }
 };
+
+// Permanently delete access grant
+export const deleteCareSecureGrant = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId || req.user?.id || req.user?._id;
+    const { id } = req.params;
+    if (!userId) {
+      res.status(401).json({ message: 'User not authenticated' });
+      return;
+    }
+
+    const query: any = { userId: new Types.ObjectId(userId.toString()) };
+    if (Types.ObjectId.isValid(id)) {
+      query.$or = [{ _id: id }, { accessId: id }];
+    } else {
+      query.accessId = id;
+    }
+
+    const grant = await CareSecureGrant.findOneAndDelete(query);
+    if (!grant) {
+      res.status(404).json({ message: 'Access grant not found' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'CareSecure access grant deleted successfully',
+      data: grant,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting CareSecure grant', error: (error as Error).message });
+  }
+};
+

@@ -20,7 +20,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { email, password, name, title, phone, gender, country } = req.body;
+    const { email, password, name, title, phone, gender, country, referralCode, referredByCode } = req.body;
     if (!email || !name) {
       res.status(400).json({ message: 'Name and email are required.' });
       return;
@@ -34,6 +34,8 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       phone,
       gender,
       country,
+      referralCode,
+      referredByCode,
     });
 
     res.status(201).json({
