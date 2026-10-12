@@ -8,6 +8,7 @@ import { adminVoucherRoutes } from './adminVoucherRoutes';
 import { adminNewsRoutes } from './adminNewsRoutes';
 import { adminReportRoutes } from './adminReportRoutes';
 import { requireAuth, requireRoles } from '../../middlewares/auth';
+import pdhoRegistrationRoutes from '../user/pdhoRegistrationRoutes';
 
 const router = Router();
 
@@ -43,6 +44,9 @@ router.use('/vouchers', adminVoucherRoutes);
 
 // Admin News Management (Articles CRUD, scheduling, publishing)
 router.use('/news', adminNewsRoutes);
+
+// Admin PDHO Organisation Approval Management (/api/v1/admin/pdho/*)
+router.use('/pdho', pdhoRegistrationRoutes);
 
 import { getAdminDashboardMetrics } from '../../controllers/admin/adminDashboardController';
 

@@ -56,6 +56,8 @@ export interface IUser extends Document {
   resetPasswordExpires?: Date;
   mfaSecret?: string;
   isMFAEnabled: boolean;
+  isPdhoApproved?: boolean;
+  pdhoStatus?: string;
   notes?: IUserNote[];
   advertsCount?: number;
   vouchersCount?: number;
@@ -196,6 +198,14 @@ const UserSchema = new Schema<IUser>(
     isMFAEnabled: {
       type: Boolean,
       default: false,
+    },
+    isPdhoApproved: {
+      type: Boolean,
+      default: false,
+    },
+    pdhoStatus: {
+      type: String,
+      default: 'Not Registered',
     },
     notes: [UserNoteSchema],
     advertsCount: {

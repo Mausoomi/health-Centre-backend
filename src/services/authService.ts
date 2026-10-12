@@ -233,14 +233,58 @@ export const registerUser = async (data: {
   const targetRefCode = data.referralCode || data.referredByCode;
   if (targetRefCode) {
     try {
+      const cleanRefCode = targetRefCode.trim().toUpperCase();
       const { recordReferralCredit } = await import('../controllers/user/premium/referralController');
-      await recordReferralCredit(targetRefCode, user.name);
+      await recordReferralCredit(cleanRefCode, user.name);
+
+      // Automatic CDHA citizen association & PDHO inheritance (Client Doc Page 6 Section 15:
+      // "Citizen follows: CDHA referral -> Premium registration -> automatic CDHA association.
+      //  The citizen should also inherit the relevant PDHO relationship where required by the support model.")
+      const ReferralProgramme = (await import('../models/premium/ReferralProgramme')).default;
+      const CDHACertificate = (await import('../models/premium/CDHACertificate')).default;
+      const PDHOAffiliation = (await import('../models/premium/PDHOAffiliation')).default;
+      const CitizenSupportRelationship = (await import('../models/premium/CitizenSupportRelationship')).default;
+
+      const referrer = await ReferralProgramme.findOne({ referralCode: cleanRefCode });
+      if (referrer && referrer.userId) {
+        // Verify CDHA is active
+        const cdhaCert = await CDHACertificate.findOne({ userId: referrer.userId, roleActivated: true, isRevoked: false });
+        if (cdhaCert) {
+          // Check capacity limit: max 50
+          const currentActiveCount = await CitizenSupportRelationship.countDocuments({
+            cdhaUserId: referrer.userId,
+            status: 'Active',
+          });
+
+          if (currentActiveCount < 50) {
+            // Find active PDHO affiliation
+            const activeAffiliation = await PDHOAffiliation.findOne({
+              cdhaUserId: referrer.userId,
+              status: 'Active',
+            });
+
+            await CitizenSupportRelationship.create({
+              cdhaUserId: referrer.userId,
+              citizenUserId: user._id,
+              citizenCode: memberId,
+              citizenName: user.name,
+              pdhoId: activeAffiliation?.pdhoId,
+              pdhoName: activeAffiliation ? activeAffiliation.pdhoName : 'None',
+              supportArea: 'CareMonitor',
+              source: 'CDHA referral',
+              status: 'Active',
+              lastActivity: 'Just enrolled via CDHA referral',
+            });
+            console.log(`[CDHA GTM] Citizen ${user.name} automatically enrolled with CDHA ${referrer.userId} and PDHO ${activeAffiliation?.pdhoName || 'None'}`);
+          }
+        }
+      }
     } catch (err) {
       console.error('Error auto-crediting referral on registration:', err);
     }
   }
 
-  const frontendUrl = process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
   // Send the verification link email via AWS SES
@@ -423,7 +467,7 @@ export const resendVerificationEmail = async (
   user.verificationTokenExpires = new Date(Date.now() + 24 * 3600 * 1000); // 24 hours
   await user.save();
 
-  const frontendUrl = process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
   await sendVerificationEmail({
@@ -514,7 +558,7 @@ export const requestPasswordReset = async (
   user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
   await user.save();
 
-  const frontendUrl = process.env.FRONTEND_URL || 'https://healthcentreapp.netlify.app';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
   await sendPasswordResetEmail({

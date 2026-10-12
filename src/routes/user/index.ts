@@ -8,6 +8,7 @@ import { userPaymentRoutes } from './userPaymentRoutes';
 import { userNewsRoutes } from './userNewsRoutes';
 import standardRoutes from './standard';
 import premiumRoutes from './premium';
+import pdhoRegistrationRoutes from './pdhoRegistrationRoutes';
 
 const router = Router();
 
@@ -44,6 +45,9 @@ router.use('/standard', standardRoutes);
 
 // Premium Digital Health flow routes (/api/v1/user/premium/*)
 router.use('/premium', premiumRoutes);
+
+// PDHO Organisation Registration & Approval routes (/api/v1/user/pdho/*)
+router.use('/pdho', pdhoRegistrationRoutes);
 
 export {
   router as userRoutes,
