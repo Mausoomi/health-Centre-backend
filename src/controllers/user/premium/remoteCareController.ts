@@ -159,12 +159,37 @@ export async function updateRemoteCarePlan(req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ success: false, message: 'Remote care plan not found' });
     }
 
-    const { status, planName, selectedAction, recipients } = req.body;
+    const {
+      status,
+      planName,
+      selectedAction,
+      recipients,
+      triggerType,
+      scheduleType,
+      selectedDays,
+      scheduleDate,
+      scheduleTime,
+      eventMonitor,
+      customActionText,
+    } = req.body;
 
-    if (status) plan.status = status;
-    if (planName) plan.planName = planName;
+    if (status !== undefined) plan.status = status;
+    if (planName) plan.planName = planName.trim();
     if (selectedAction) plan.selectedAction = selectedAction;
     if (recipients) plan.recipients = recipients;
+    if (triggerType) plan.triggerType = triggerType;
+    if (scheduleType) plan.scheduleType = scheduleType;
+    if (selectedDays) plan.selectedDays = selectedDays;
+    if (scheduleDate !== undefined) plan.scheduleDate = scheduleDate;
+    if (scheduleTime) plan.scheduleTime = scheduleTime;
+    if (eventMonitor) plan.eventMonitor = eventMonitor;
+    if (customActionText !== undefined) plan.customActionText = customActionText;
+
+    if (triggerType === 'event') {
+      plan.nextTrigger = 'Monitored continuously';
+    } else if (scheduleTime) {
+      plan.nextTrigger = `Next check at ${scheduleTime}`;
+    }
 
     await plan.save();
     return res.json({ success: true, data: formatPlanResponse(plan), message: 'Plan updated successfully' });

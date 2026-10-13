@@ -15,77 +15,40 @@ const getTransporter = (): Transporter => {
   const user = process.env.SMTP_USER || '';
   const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
   const host = process.env.SMTP_HOST || 'email-smtp.eu-west-2.amazonaws.com';
-  const rawPort = Number(process.env.SMTP_PORT) || 2465;
-  const isAwsSes = host.includes('amazonaws.com');
-  
-  // Render Free explicitly blocks standard SMTP outbound ports 25, 465, and 587.
-  // AWS SES officially provides Port 2465 (SSL Wrapper) and Port 2587 (STARTTLS) to bypass cloud SMTP blocks.
-  let port = rawPort;
-  let secure = process.env.SMTP_SECURE === 'true';
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const secure = process.env.SMTP_SECURE === 'true';
 
-  if (isAwsSes) {
-    if (rawPort === 465 || rawPort === 2465 || !process.env.SMTP_PORT) {
-      port = 2465; // AWS SES Alternate Implicit TLS (SSL) port -> unblocked by Render
-      secure = true;
-    } else if (rawPort === 587 || rawPort === 2587) {
-      port = 2587; // AWS SES Alternate STARTTLS port -> unblocked by Render
-      secure = false;
-    }
-  } else {
-    secure = port === 465 || secure;
+  if (transporter && lastUser === user && lastPass === pass) {
+    return transporter;
   }
 
-  // Direct Nodemailer transport for instant, reliable delivery on cloud instances
-  return nodemailer.createTransport({
-    host: host.includes('gmail') || user.endsWith('@gmail.com') ? 'smtp.gmail.com' : host,
+  lastUser = user;
+  lastPass = pass;
+
+  // If host is Gmail, use optimized Gmail service configuration
+  if (host.includes('gmail') || user.endsWith('@gmail.com')) {
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user,
+        pass,
+      },
+    });
+    return transporter;
+  }
+
+  // Standard AWS SES / SMTP transport
+  transporter = nodemailer.createTransport({
+    host,
     port,
     secure,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-    family: 4, // Enforce IPv4 to eliminate Node 24 / Render IPv6 connection timeout
     auth: {
       user,
       pass,
     },
-    tls: {
-      rejectUnauthorized: false,
-    },
-  } as any);
-};
+  });
 
-export const getFromAddress = (defaultFrom: string): string => {
-  const envFrom = process.env.EMAIL_FROM;
-  if (!envFrom || !envFrom.trim()) return defaultFrom;
-  let clean = envFrom.trim();
-  // Strip outer quotes if entire string was wrapped: '"HealthCentreApp <info@healthcentreapp.com>"'
-  if (clean.startsWith('"') && clean.endsWith('"') && !clean.slice(1, -1).includes('"')) {
-    clean = clean.slice(1, -1).trim();
-  }
-  return clean || defaultFrom;
-};
-
-/**
- * Diagnostic helper to verify SMTP connection & send test email
- */
-export const testEmailConnection = async (testTo?: string) => {
-  const activeTransporter = getTransporter();
-  await activeTransporter.verify();
-  let sendResult = null;
-  if (testTo) {
-    const fromAddress = getFromAddress('"HealthCentreApp" <info@healthcentreapp.com>');
-    sendResult = await activeTransporter.sendMail({
-      from: fromAddress,
-      to: testTo.trim().toLowerCase(),
-      subject: 'HealthCentreApp Email Diagnostic Test',
-      text: 'This is a test email confirming your SMTP / AWS SES connection is fully working.',
-      html: '<b>This is a test email confirming your SMTP / AWS SES connection is fully working.</b>',
-    });
-  }
-  return {
-    verified: true,
-    sendResult,
-  };
+  return transporter;
 };
 
 /**
@@ -102,7 +65,7 @@ export const sendOtpEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = getFromAddress('HealthCentreApp <info@healthcentreapp.com>');
+  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -208,7 +171,7 @@ export const sendVerificationEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = getFromAddress('HealthCentreApp <info@healthcentreapp.com>');
+  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -324,7 +287,7 @@ export const sendPasswordResetEmail = async ({
   deliveredTo?: string;
 }> => {
   const recipientName = name || to.split('@')[0] || 'Member';
-  const fromAddress = getFromAddress('HealthCentreApp <info@healthcentreapp.com>');
+  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp" <info@healthcentreapp.com>';
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `
@@ -447,7 +410,7 @@ export const sendCareSecureInvitationEmail = async ({
   messageId?: string;
   deliveredTo?: string;
 }> => {
-  const fromAddress = getFromAddress('HealthCentreApp CareSecure <info@healthcentreapp.com>');
+  const fromAddress = process.env.EMAIL_FROM || '"HealthCentreApp CareSecure" <info@healthcentreapp.com>';
   const normalizedTo = to.trim().toLowerCase();
 
   const htmlContent = `

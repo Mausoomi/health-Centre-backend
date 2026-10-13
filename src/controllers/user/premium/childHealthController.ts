@@ -71,18 +71,6 @@ export async function getChildProfiles(req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    // Automatically purge legacy auto-seeded sample profiles from DB
-    await ChildProfile.deleteMany({
-      userId,
-      firstName: { $in: ['Amina', 'Zuri', 'Kofi'] },
-    });
-
-    // Clear auto-seeded unadministered vaccine records so users start with 0 records
-    await ChildProfile.updateMany(
-      { userId, 'immunisationRecords.administeredDate': { $exists: false }, 'immunisationRecords.administeredLocation': { $exists: false } },
-      { $set: { immunisationRecords: [] } }
-    );
-
     const profiles = await ChildProfile.find({ userId }).sort({ createdAt: -1 });
     const formatted = profiles.map(formatChildResponse);
     res.json({ success: true, data: formatted });
@@ -117,6 +105,10 @@ export async function createChildProfile(req: AuthenticatedRequest, res: Respons
       placeOfBirth,
       birthWeightKg,
       gestationWeeks,
+      paymentStatus,
+      paymentReference,
+      paymentAmount,
+      paymentCurrency,
     } = req.body;
 
     if (!firstName || !surname || !dob || !sex) {
@@ -133,6 +125,10 @@ export async function createChildProfile(req: AuthenticatedRequest, res: Respons
       });
     }
 
+    const now = new Date();
+    const renewalDate = new Date();
+    renewalDate.setFullYear(now.getFullYear() + 1);
+
     const child = new ChildProfile({
       userId,
       firstName,
@@ -143,7 +139,7 @@ export async function createChildProfile(req: AuthenticatedRequest, res: Respons
       relationship: relationship || 'Parent',
       country: country || 'Ghana',
       stateRegion,
-      reference,
+      reference: reference || ('HCA-CH-' + Math.floor(10000 + Math.random() * 90000)),
       placeOfBirth,
       birthWeightKg: birthWeightKg ? Number(birthWeightKg) : undefined,
       gestationWeeks: gestationWeeks ? Number(gestationWeeks) : undefined,
@@ -151,6 +147,12 @@ export async function createChildProfile(req: AuthenticatedRequest, res: Respons
       newbornCareNote: `Ensure responsive feeding, track sleep patterns, and maintain warmth for ${firstName}.`,
       growthMeasurements: initialMeasurements,
       immunisationRecords: [],
+      paymentStatus: paymentStatus || 'Paid',
+      paymentReference: paymentReference || `PAY-CH-${Date.now().toString().slice(-6)}`,
+      paymentAmount: paymentAmount !== undefined ? Number(paymentAmount) : 6000,
+      paymentCurrency: paymentCurrency || 'NGN',
+      paymentDate: now,
+      subscriptionRenewalDate: renewalDate,
     });
 
     await child.save();
@@ -274,9 +276,18 @@ export async function addImmunisationRecord(req: AuthenticatedRequest, res: Resp
   try {
     const userId = req.user?.userId || req.user?.id || req.user?._id;
     const { id } = req.params;
-    const { vaccineName, doseNumber, status, administeredDate, administeredLocation, notes } = req.body;
+    const {
+      vaccineName,
+      doseNumber,
+      status,
+      dueDate,
+      administeredDate,
+      administeredLocation,
+      notes,
+      recordId,
+    } = req.body;
 
-    if (!vaccineName) {
+    if (!vaccineName || !vaccineName.trim()) {
       res.status(400).json({ success: false, error: 'Vaccine name is required' });
       return;
     }
@@ -287,21 +298,43 @@ export async function addImmunisationRecord(req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    const existingIndex = child.immunisationRecords.findIndex(
-      (v) => v.vaccineName.toLowerCase() === vaccineName.toLowerCase()
-    );
+    // Check if updating an existing record by recordId or vaccineName
+    let existingRecord: any = null;
+    if (recordId) {
+      existingRecord = (child.immunisationRecords as any).find(
+        (v: any) => v._id?.toString() === recordId
+      );
+    }
 
-    if (existingIndex >= 0) {
-      child.immunisationRecords[existingIndex].status = status || 'Completed';
-      if (administeredDate) child.immunisationRecords[existingIndex].administeredDate = new Date(administeredDate);
-      if (administeredLocation) child.immunisationRecords[existingIndex].administeredLocation = administeredLocation;
-      if (notes) child.immunisationRecords[existingIndex].notes = notes;
+    if (!existingRecord) {
+      existingRecord = (child.immunisationRecords as any).find(
+        (v: any) => v.vaccineName?.toLowerCase() === vaccineName.trim().toLowerCase()
+      );
+    }
+
+    if (existingRecord) {
+      existingRecord.vaccineName = vaccineName.trim();
+      if (doseNumber !== undefined) existingRecord.doseNumber = doseNumber;
+      if (status !== undefined) existingRecord.status = status;
+      if (dueDate !== undefined) existingRecord.dueDate = dueDate ? new Date(dueDate) : undefined;
+      if (administeredDate !== undefined) {
+        existingRecord.administeredDate = administeredDate ? new Date(administeredDate) : undefined;
+      } else if (status === 'Completed' && !existingRecord.administeredDate) {
+        existingRecord.administeredDate = new Date();
+      }
+      if (administeredLocation !== undefined) existingRecord.administeredLocation = administeredLocation;
+      if (notes !== undefined) existingRecord.notes = notes;
     } else {
-      child.immunisationRecords.push({
-        vaccineName,
+      (child.immunisationRecords as any).push({
+        vaccineName: vaccineName.trim(),
         doseNumber,
-        status: status || 'Completed',
-        administeredDate: administeredDate ? new Date(administeredDate) : new Date(),
+        status: status || 'Upcoming',
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        administeredDate: administeredDate
+          ? new Date(administeredDate)
+          : status === 'Completed'
+          ? new Date()
+          : undefined,
         administeredLocation,
         notes,
       });
@@ -309,6 +342,97 @@ export async function addImmunisationRecord(req: AuthenticatedRequest, res: Resp
 
     await child.save();
     res.json({ success: true, data: formatChildResponse(child) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Server error' });
+  }
+}
+
+/**
+ * PUT /api/v1/user/premium/child-health/:id/immunisation/:vaccineId
+ * Update an existing immunisation record by its ID or name
+ */
+export async function updateImmunisationRecord(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId || req.user?.id || req.user?._id;
+    const { id, vaccineId } = req.params;
+    const {
+      vaccineName,
+      doseNumber,
+      status,
+      dueDate,
+      administeredDate,
+      administeredLocation,
+      notes,
+    } = req.body;
+
+    const child = await ChildProfile.findOne({ _id: id, userId });
+    if (!child) {
+      res.status(404).json({ success: false, error: 'Child profile not found' });
+      return;
+    }
+
+    const decodedId = decodeURIComponent(vaccineId);
+    const record: any = (child.immunisationRecords as any).find(
+      (v: any) => v._id?.toString() === decodedId || v.vaccineName?.toLowerCase() === decodedId.toLowerCase()
+    );
+
+    if (!record) {
+      res.status(404).json({ success: false, error: 'Immunisation record not found' });
+      return;
+    }
+
+    if (vaccineName && vaccineName.trim()) record.vaccineName = vaccineName.trim();
+    if (doseNumber !== undefined) record.doseNumber = doseNumber;
+    if (status !== undefined) record.status = status;
+    if (dueDate !== undefined) record.dueDate = dueDate ? new Date(dueDate) : undefined;
+    if (administeredDate !== undefined) {
+      record.administeredDate = administeredDate ? new Date(administeredDate) : undefined;
+    } else if (status === 'Completed' && !record.administeredDate) {
+      record.administeredDate = new Date();
+    }
+    if (administeredLocation !== undefined) record.administeredLocation = administeredLocation;
+    if (notes !== undefined) record.notes = notes;
+
+    await child.save();
+    res.json({ success: true, data: formatChildResponse(child) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Server error' });
+  }
+}
+
+/**
+ * DELETE /api/v1/user/premium/child-health/:id/immunisation/:vaccineId
+ * Delete an immunisation record by its ID or name
+ */
+export async function deleteImmunisationRecord(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId || req.user?.id || req.user?._id;
+    const { id, vaccineId } = req.params;
+
+    const child = await ChildProfile.findOne({ _id: id, userId });
+    if (!child) {
+      res.status(404).json({ success: false, error: 'Child profile not found' });
+      return;
+    }
+
+    const decodedId = decodeURIComponent(vaccineId);
+    const initialCount = child.immunisationRecords.length;
+
+    child.immunisationRecords = (child.immunisationRecords as any).filter(
+      (v: any) => v._id?.toString() !== decodedId && v.vaccineName?.toLowerCase() !== decodedId.toLowerCase()
+    );
+
+    if (child.immunisationRecords.length === initialCount) {
+      res.status(404).json({ success: false, error: 'Immunisation record not found' });
+      return;
+    }
+
+    await child.save();
+    res.json({
+      success: true,
+      message: 'Immunisation record deleted successfully',
+      data: formatChildResponse(child),
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message || 'Server error' });
   }

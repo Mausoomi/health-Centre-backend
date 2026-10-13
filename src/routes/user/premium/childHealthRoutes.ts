@@ -8,6 +8,8 @@ import {
   deleteChildProfile,
   addGrowthMeasurement,
   addImmunisationRecord,
+  updateImmunisationRecord,
+  deleteImmunisationRecord,
 } from '../../../controllers/user/premium/childHealthController';
 
 const router = Router();
@@ -21,5 +23,8 @@ router.put('/:id', updateChildProfile);
 router.delete('/:id', deleteChildProfile);
 router.post('/:id/growth', addGrowthMeasurement);
 router.post('/:id/immunisation', addImmunisationRecord);
+router.put('/:id/immunisation/:vaccineId', updateImmunisationRecord);
+router.delete('/:id/immunisation/:vaccineId', deleteImmunisationRecord);
 
 export default router;
+

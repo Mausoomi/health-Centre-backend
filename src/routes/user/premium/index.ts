@@ -4,6 +4,7 @@ import careMonitorRoutes from './careMonitorRoutes';
 import referralRoutes from './referralRoutes';
 import remoteCareRoutes from './remoteCareRoutes';
 import cdhaRoutes from './cdhaRoutes';
+import aiCareAssistRoutes from './aiCareAssistRoutes';
 
 const router = Router();
 
@@ -21,5 +22,8 @@ router.use('/remote-care', remoteCareRoutes);
 
 // Premium CDHA routes (/api/v1/user/premium/cdha/*)
 router.use('/cdha', cdhaRoutes);
+
+// Premium AI CareAssist routes (/api/v1/user/premium/ai-careassist/*)
+router.use('/ai-careassist', aiCareAssistRoutes);
 
 export default router;

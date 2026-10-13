@@ -26,6 +26,24 @@ export const requireAuth = (
   }
 };
 
+export const optionalAuth = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const payload = verifyAccessToken(token);
+      req.user = payload;
+    }
+  } catch {
+    // Proceed without authenticated user
+  }
+  next();
+};
+
 export const requireRoles = (roles: string[]) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {

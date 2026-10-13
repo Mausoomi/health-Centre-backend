@@ -10,6 +10,7 @@ export interface IChildGrowthMeasurement {
 }
 
 export interface IChildImmunisationRecord {
+  _id?: any;
   vaccineName: string;
   doseNumber?: string;
   status: 'Due now' | 'Upcoming' | 'Completed' | 'Overdue';
@@ -37,6 +38,12 @@ export interface IChildProfile extends Document {
   newbornCareNote?: string;
   growthMeasurements: IChildGrowthMeasurement[];
   immunisationRecords: IChildImmunisationRecord[];
+  paymentStatus?: 'Paid' | 'Pending' | 'Free';
+  paymentReference?: string;
+  paymentAmount?: number;
+  paymentCurrency?: string;
+  paymentDate?: Date;
+  subscriptionRenewalDate?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,6 +86,12 @@ const ChildProfileSchema: Schema = new Schema(
     newbornCareNote: { type: String },
     growthMeasurements: [ChildGrowthMeasurementSchema],
     immunisationRecords: [ChildImmunisationRecordSchema],
+    paymentStatus: { type: String, enum: ['Paid', 'Pending', 'Free'], default: 'Paid' },
+    paymentReference: { type: String },
+    paymentAmount: { type: Number, default: 6000 },
+    paymentCurrency: { type: String, default: 'NGN' },
+    paymentDate: { type: Date, default: Date.now },
+    subscriptionRenewalDate: { type: Date },
   },
   {
     timestamps: true,

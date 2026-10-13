@@ -113,7 +113,8 @@ export const verifyStripeSession = async (sessionId: string) => {
   const orderType = session.metadata?.orderType;
 
   if (isPaid && (advertId || customerEmail)) {
-    const isPremium = (advertId && advertId.startsWith('PREM-')) || orderType?.includes('Premium');
+    const isChild = (advertId && advertId.startsWith('CH-')) || orderType?.includes('Child');
+    const isPremium = ((advertId && advertId.startsWith('PREM-')) || orderType?.includes('Premium')) && !isChild;
 
     if (isPremium && customerEmail) {
       // Auto upgrade user plan to Premium Plan in Database
@@ -121,7 +122,7 @@ export const verifyStripeSession = async (sessionId: string) => {
         { email: customerEmail.toLowerCase() },
         { plan: 'Premium Plan' }
       ).catch((err) => console.error('Error upgrading user plan on Stripe success:', err));
-    } else if (advertId) {
+    } else if (advertId && !isChild) {
       // Update Advert in DB
       await Advert.findOneAndUpdate(
         { $or: [{ advertId: advertId }, { _id: advertId }] },
@@ -135,7 +136,7 @@ export const verifyStripeSession = async (sessionId: string) => {
       paymentId: `PAY-${Date.now().toString().slice(-6)}`,
       customer: session.customer_details?.name || customerEmail?.split('@')[0] || 'Subscriber',
       email: customerEmail || 'customer@healthcentreapp.com',
-      purpose: isPremium ? 'Premium Plan Subscription' : 'Advert Placement',
+      purpose: isChild ? 'ChildHealth Profile Subscription' : isPremium ? 'Premium Plan Subscription' : 'Advert Placement',
       amount: amountTotal,
       currency: currency,
       gateway: 'Stripe',
@@ -148,6 +149,7 @@ export const verifyStripeSession = async (sessionId: string) => {
       success: true,
       paid: true,
       isPremium,
+      isChild,
       session: {
         id: session.id,
         amountTotal,
