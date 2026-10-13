@@ -14,8 +14,10 @@ export const connectDB = async (): Promise<void> => {
       socketTimeoutMS: 45000,
     });
     console.log('MongoDB Connected successfully.');
-  } catch (error) {
-    console.error('MongoDB Connection Error:', error);
-    process.exit(1);
+  } catch (error: any) {
+    console.error('MongoDB Connection Error:', error?.message || error);
+    if (!process.env.MONGODB_URI) {
+      console.warn('[DB WARNING] MONGODB_URI environment variable is not defined on Render!');
+    }
   }
 };
