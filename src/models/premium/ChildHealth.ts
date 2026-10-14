@@ -32,6 +32,9 @@ export interface IChildProfile extends Document {
   stateRegion?: string;
   reference?: string;
   placeOfBirth?: string;
+  hospitalName?: string;
+  birthTime?: string;
+  time?: string;
   birthWeightKg?: number;
   gestationWeeks?: number;
   growthStatus: string;
@@ -76,10 +79,13 @@ const ChildProfileSchema: Schema = new Schema(
     dob: { type: Date, required: true },
     sex: { type: String, enum: ['Male', 'Female', 'Other'], required: true },
     relationship: { type: String, default: 'Parent' },
-    country: { type: String, default: 'Ghana' },
+    country: { type: String },
     stateRegion: { type: String },
     reference: { type: String },
     placeOfBirth: { type: String },
+    hospitalName: { type: String },
+    birthTime: { type: String },
+    time: { type: String },
     birthWeightKg: { type: Number },
     gestationWeeks: { type: Number },
     growthStatus: { type: String, default: 'On track' },

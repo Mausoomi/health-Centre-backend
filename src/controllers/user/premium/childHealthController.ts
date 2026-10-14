@@ -54,6 +54,10 @@ function formatChildResponse(child: any) {
     nextVaccineDue: dueVaccine ? dueVaccine.status : 'Up to date',
     nextCareContact: 'Routine Check-up',
     nextCareDue: 'As scheduled',
+    hospitalName: obj.hospitalName || obj.placeOfBirth || '',
+    birthTime: obj.birthTime || obj.time || '',
+    time: obj.time || obj.birthTime || '',
+    placeOfBirth: obj.placeOfBirth || obj.hospitalName || '',
     newbornCareNote: obj.newbornCareNote || `Ensure responsive feeding, track sleep patterns, and practice daily tummy time for ${obj.firstName}.`,
     exploreNote: `For ${obj.firstName} now`,
   };
@@ -103,6 +107,9 @@ export async function createChildProfile(req: AuthenticatedRequest, res: Respons
       stateRegion,
       reference,
       placeOfBirth,
+      hospitalName,
+      birthTime,
+      time,
       birthWeightKg,
       gestationWeeks,
       paymentStatus,
@@ -115,6 +122,9 @@ export async function createChildProfile(req: AuthenticatedRequest, res: Respons
       res.status(400).json({ success: false, error: 'First name, surname, date of birth, and sex are required' });
       return;
     }
+
+    const resolvedHospital = (hospitalName || placeOfBirth || '').trim() || undefined;
+    const resolvedTime = (birthTime || time || '').trim() || undefined;
 
     const initialMeasurements: any[] = [];
     if (birthWeightKg) {
@@ -137,10 +147,13 @@ export async function createChildProfile(req: AuthenticatedRequest, res: Respons
       dob: new Date(dob),
       sex,
       relationship: relationship || 'Parent',
-      country: country || 'Ghana',
+      country: (country || '').trim() || undefined,
       stateRegion,
       reference: reference || ('HCA-CH-' + Math.floor(10000 + Math.random() * 90000)),
-      placeOfBirth,
+      placeOfBirth: resolvedHospital,
+      hospitalName: resolvedHospital,
+      birthTime: resolvedTime,
+      time: resolvedTime,
       birthWeightKg: birthWeightKg ? Number(birthWeightKg) : undefined,
       gestationWeeks: gestationWeeks ? Number(gestationWeeks) : undefined,
       growthStatus: 'Steady',
@@ -193,9 +206,15 @@ export async function updateChildProfile(req: AuthenticatedRequest, res: Respons
     const userId = req.user?.userId || req.user?.id || req.user?._id;
     const { id } = req.params;
 
+    const updates = { ...req.body };
+    if (updates.hospitalName && !updates.placeOfBirth) updates.placeOfBirth = updates.hospitalName;
+    if (updates.placeOfBirth && !updates.hospitalName) updates.hospitalName = updates.placeOfBirth;
+    if (updates.birthTime && !updates.time) updates.time = updates.birthTime;
+    if (updates.time && !updates.birthTime) updates.birthTime = updates.time;
+
     const child = await ChildProfile.findOneAndUpdate(
       { _id: id, userId },
-      { $set: req.body },
+      { $set: updates },
       { new: true, runValidators: true }
     );
 
