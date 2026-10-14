@@ -21,6 +21,7 @@ interface GeminiContent {
 const CANDIDATE_MODELS = [
   'gemini-3.5-flash-lite',
   'gemini-flash-lite-latest',
+  'gemini-3.1-flash-lite',
   'gemini-3.5-flash',
   'gemini-3.7-flash',
   'gemini-3.8-flash'
@@ -57,7 +58,7 @@ async function callGeminiApi(modelName: string, payload: any, apiKey: string): P
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(postData),
     },
-    timeout: 12000,
+    timeout: 8000,
   };
 
   return new Promise((resolve, reject) => {
@@ -113,7 +114,7 @@ export const geminiService = {
     patientContext?: string,
     image?: { mimeType: string; data: string }
   ): Promise<string> {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is not configured in backend environment');
     }
